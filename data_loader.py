@@ -256,6 +256,7 @@ def _normalize_loaded_frame(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         df_raw = df_raw.explode("operadores_list")
         df_raw["operador"] = df_raw["operadores_list"].fillna("").astype(str).str.strip()
         df_raw = df_raw.drop(columns=["operadores", "operadores_list"])
+        df_raw = df_raw.reset_index(drop=True)
 
     for col in ["quantidade_produzida", "pecas_mortas"]:
         if col in df_raw.columns:

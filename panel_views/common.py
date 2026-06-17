@@ -53,8 +53,9 @@ def render_prod_hora_kpis(df: pd.DataFrame, *, show_info: bool = True) -> None:
             st.info("Sem dados suficientes para calcular produtividade por operador/hora.")
         return
 
-    top_row = op_df.loc[op_df["prod_hora_apont"].idxmax()]
-    bottom_row = op_df.loc[op_df["prod_hora_apont"].idxmin()]
+    op_df = op_df.sort_values("prod_hora_apont", ascending=False).reset_index(drop=True)
+    top_row = op_df.iloc[0]
+    bottom_row = op_df.iloc[-1]
     mean_prod_hora = op_df["prod_hora_apont"].mean()
     metric_col1, metric_col2, metric_col3 = st.columns(3)
     with metric_col1:
