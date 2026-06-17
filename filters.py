@@ -161,7 +161,7 @@ def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
         )
         _sanitize_multiselect_state("filter_display", displays)
         display_selected = st.multiselect(
-            "Display/Peca produzida", displays, default=[], key="filter_display"
+            "Display/Peca produzida", displays, key="filter_display"
         )
 
         lote_col = None
@@ -185,7 +185,7 @@ def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
             else "Codigo do lote"
         )
         lote_selected = st.multiselect(
-            lote_label, lotes, default=[], key="filter_numero_display"
+            lote_label, lotes, key="filter_numero_display"
         )
 
         available_machines = df_filter.copy()
@@ -204,7 +204,7 @@ def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
         )
         _sanitize_multiselect_state("filter_maquinario", machines)
         machine_selected = st.multiselect(
-            "Maquinario", machines, default=[], key="filter_maquinario"
+            "Maquinario", machines, key="filter_maquinario"
         )
 
         available_processes = df_filter.copy()
@@ -226,7 +226,7 @@ def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
         )
         _sanitize_multiselect_state("filter_processo", processes)
         process_selected = st.multiselect(
-            "Processo", processes, default=[], key="filter_processo"
+            "Processo", processes, key="filter_processo"
         )
 
         available_operators = available_processes
@@ -240,7 +240,7 @@ def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
         )
         _sanitize_multiselect_state("filter_operador", operators)
         operator_selected = st.multiselect(
-            "Operador", operators, default=[], key="filter_operador"
+            "Operador", operators, key="filter_operador"
         )
 
     filtered = df_filter.copy()
