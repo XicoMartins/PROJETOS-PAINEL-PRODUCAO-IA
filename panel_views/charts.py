@@ -90,6 +90,33 @@ def _build_operator_contribution_frame(df: pd.DataFrame) -> pd.DataFrame:
     return op_df
 
 
+def _build_apontamento_rate_frame(df: pd.DataFrame) -> pd.DataFrame:
+    required = {"duracao_horas", "quantidade_produzida"}
+    if df.empty or not required.issubset(df.columns):
+        return pd.DataFrame()
+
+    rate_df = df.dropna(subset=["duracao_horas", "quantidade_produzida"]).copy()
+    if rate_df.empty:
+        return pd.DataFrame()
+
+    rate_df["duracao_horas"] = pd.to_numeric(rate_df["duracao_horas"], errors="coerce")
+    rate_df["quantidade_produzida"] = pd.to_numeric(
+        rate_df["quantidade_produzida"], errors="coerce"
+    )
+    rate_df = rate_df.dropna(subset=["duracao_horas", "quantidade_produzida"])
+    rate_df = rate_df[rate_df["duracao_horas"] > 0]
+    if rate_df.empty:
+        return pd.DataFrame()
+
+    rate_df["prod_hora_apont"] = (
+        rate_df["quantidade_produzida"] / rate_df["duracao_horas"]
+    )
+    rate_df["prod_hora_apont"] = pd.to_numeric(
+        rate_df["prod_hora_apont"], errors="coerce"
+    )
+    return rate_df.dropna(subset=["prod_hora_apont"])
+
+
 def _render_remaining_process_chart(df: pd.DataFrame, filter_context: FilterContext) -> None:
     maquinario_selected = filter_context.maquinario_selected
     processo_selected = filter_context.processo_selected
@@ -558,9 +585,11 @@ def render_charts(df: pd.DataFrame, filter_context: FilterContext) -> None:
             op_df = op_df.dropna(subset=["prod_hora_apont"])
             if not op_df.empty:
                 render_prod_hora_kpis(op_df, show_info=False)
+                apontamento_df = _build_apontamento_rate_frame(df)
                 table_cols = [
                     c
                     for c in [
+                        "id",
                         "operador",
                         "processo",
                         "data_producao",
@@ -568,9 +597,11 @@ def render_charts(df: pd.DataFrame, filter_context: FilterContext) -> None:
                         "duracao_horas",
                         "prod_hora_apont",
                     ]
-                    if c in op_df.columns
+                    if c in apontamento_df.columns
                 ]
-                table = op_df[table_cols].copy().sort_values("prod_hora_apont", ascending=False)
+                table = apontamento_df[table_cols].copy().sort_values(
+                    "prod_hora_apont", ascending=False
+                )
                 table["prod_hora_apont"] = table["prod_hora_apont"].round(2)
                 if "quantidade_produzida" in table:
                     table["quantidade_produzida"] = table["quantidade_produzida"].round(2)
