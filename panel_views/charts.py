@@ -52,6 +52,44 @@ def render_kpis(df: pd.DataFrame, filter_context: FilterContext) -> None:
         col5.metric(processo_total_label, f"{processo_total:,.0f}".replace(",", "."))
 
 
+def _operator_values(value) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if value is None or pd.isna(value):
+        return []
+    text = str(value).strip()
+    if not text:
+        return []
+    if ";" in text:
+        return [part.strip() for part in text.split(";") if part.strip()]
+    if "," in text:
+        return [part.strip() for part in text.split(",") if part.strip()]
+    return [text]
+
+
+def _build_operator_contribution_frame(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or "operador" not in df.columns:
+        return pd.DataFrame()
+
+    op_df = df.copy()
+    if "operadores_lista" in op_df.columns:
+        op_df["operador"] = op_df["operadores_lista"].apply(_operator_values)
+    else:
+        op_df["operador"] = op_df["operador"].apply(_operator_values)
+
+    op_df["operador_count"] = op_df["operador"].apply(len)
+    op_df = op_df[op_df["operador_count"] > 0].copy()
+    if op_df.empty:
+        return pd.DataFrame()
+
+    op_df = op_df.explode("operador").reset_index(drop=True)
+    for col in ["quantidade_produzida", "pecas_mortas"]:
+        if col in op_df.columns:
+            op_df[col] = pd.to_numeric(op_df[col], errors="coerce").fillna(0)
+            op_df[col] = op_df[col] / op_df["operador_count"]
+    return op_df
+
+
 def _render_remaining_process_chart(df: pd.DataFrame, filter_context: FilterContext) -> None:
     maquinario_selected = filter_context.maquinario_selected
     processo_selected = filter_context.processo_selected
@@ -169,7 +207,8 @@ def _build_daily_operator_rate(df: pd.DataFrame) -> pd.DataFrame:
     if not required.issubset(df.columns):
         return pd.DataFrame()
 
-    rate_df = df.dropna(
+    rate_df = _build_operator_contribution_frame(df)
+    rate_df = rate_df.dropna(
         subset=["data_producao", "operador", "duracao_horas", "quantidade_produzida"]
     ).copy()
     if rate_df.empty:
@@ -468,21 +507,25 @@ def render_charts(df: pd.DataFrame, filter_context: FilterContext) -> None:
     col3, col4 = st.columns(2)
 
     if "operador" in df:
+        op_contrib = _build_operator_contribution_frame(df)
         prod_operador = (
-            df.groupby("operador")["quantidade_produzida"]
+            op_contrib.groupby("operador")["quantidade_produzida"]
             .sum()
             .reset_index()
             .sort_values("quantidade_produzida", ascending=False)
+            if not op_contrib.empty
+            else pd.DataFrame()
         )
-        fig = px.bar(
-            prod_operador,
-            x="operador",
-            y="quantidade_produzida",
-            title="Producao por operador",
-            labels={"operador": "Operador", "quantidade_produzida": "Qtd. produzida"},
-        )
-        apply_bar_labels(fig)
-        col3.plotly_chart(fig, width="stretch")
+        if not prod_operador.empty:
+            fig = px.bar(
+                prod_operador,
+                x="operador",
+                y="quantidade_produzida",
+                title="Producao por operador",
+                labels={"operador": "Operador", "quantidade_produzida": "Qtd. produzida"},
+            )
+            apply_bar_labels(fig)
+            col3.plotly_chart(fig, width="stretch")
 
     if "display" in df:
         prod_display = (
@@ -506,7 +549,8 @@ def render_charts(df: pd.DataFrame, filter_context: FilterContext) -> None:
 
     prod_cols = {"operador", "duracao_horas", "quantidade_produzida"}
     if prod_cols.issubset(df.columns):
-        op_df = df.dropna(subset=["operador", "duracao_horas", "quantidade_produzida"]).copy()
+        op_df = _build_operator_contribution_frame(df)
+        op_df = op_df.dropna(subset=["operador", "duracao_horas", "quantidade_produzida"]).copy()
         if not op_df.empty:
             op_df = op_df[op_df["duracao_horas"] > 0]
             op_df["prod_hora_apont"] = op_df["quantidade_produzida"] / op_df["duracao_horas"]

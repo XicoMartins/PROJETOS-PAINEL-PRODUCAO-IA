@@ -103,6 +103,47 @@ def _filter_by_selection(
     return frame[frame[column].isin(selected_values)]
 
 
+def _operator_values(value) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if value is None or pd.isna(value):
+        return []
+    text = str(value).strip()
+    if not text:
+        return []
+    if ";" in text:
+        return [part.strip() for part in text.split(";") if part.strip()]
+    if "," in text:
+        return [part.strip() for part in text.split(",") if part.strip()]
+    return [text]
+
+
+def _operator_options(frame: pd.DataFrame) -> list[str]:
+    if "operadores_lista" in frame.columns:
+        values = []
+        for item in frame["operadores_lista"]:
+            values.extend(_operator_values(item))
+        return sorted(set(values))
+    if "operador_clean" in frame.columns:
+        return _sorted_unique(frame["operador_clean"])
+    return []
+
+
+def _filter_by_operator_selection(
+    frame: pd.DataFrame, selected_values: list[str]
+) -> pd.DataFrame:
+    if not selected_values:
+        return frame
+    selected = set(selected_values)
+    if "operadores_lista" in frame.columns:
+        return frame[
+            frame["operadores_lista"].apply(
+                lambda values: bool(selected.intersection(_operator_values(values)))
+            )
+        ]
+    return _filter_by_selection(frame, "operador_clean", selected_values)
+
+
 def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
     if df.empty:
         return df, FilterContext(filtered_no_operator=df.copy())
@@ -233,11 +274,7 @@ def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
         available_operators = _filter_by_selection(
             available_operators, "processo_clean", process_selected
         )
-        operators = (
-            _sorted_unique(available_operators["operador_clean"])
-            if "operador_clean" in available_operators.columns
-            else []
-        )
+        operators = _operator_options(available_operators)
         _sanitize_multiselect_state("filter_operador", operators)
         operator_selected = st.multiselect(
             "Operador", operators, key="filter_operador"
@@ -262,7 +299,7 @@ def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
 
     filtered_no_operator = filtered.copy()
 
-    filtered = _filter_by_selection(filtered, "operador_clean", operator_selected)
+    filtered = _filter_by_operator_selection(filtered, operator_selected)
 
     clean_cols = [
         "maquinario_clean",

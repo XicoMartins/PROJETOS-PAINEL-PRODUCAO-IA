@@ -58,6 +58,42 @@ class DisplayPanelSummary:
     operator_comparison: OperatorComparisonSummary | None
 
 
+def _operator_values(value) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if value is None or pd.isna(value):
+        return []
+    text = str(value).strip()
+    if not text:
+        return []
+    if ";" in text:
+        return [part.strip() for part in text.split(";") if part.strip()]
+    if "," in text:
+        return [part.strip() for part in text.split(",") if part.strip()]
+    return [text]
+
+
+def _filter_by_operator_selection(
+    df: pd.DataFrame, operator_selected: list[str]
+) -> pd.DataFrame:
+    if not operator_selected:
+        return df
+    selected = set(operator_selected)
+    if "operadores_lista" in df.columns:
+        return df[
+            df["operadores_lista"].apply(
+                lambda values: bool(selected.intersection(_operator_values(values)))
+            )
+        ]
+    if "operador" in df.columns:
+        return df[
+            df["operador"].apply(
+                lambda value: bool(selected.intersection(_operator_values(value)))
+            )
+        ]
+    return df
+
+
 def _compute_planilha_totals_by_process(
     df_metrics: pd.DataFrame,
     filtered_plan: pd.DataFrame,
@@ -295,11 +331,7 @@ def compute_display_panel_summary(
     operator_selected = filter_context.operador_selected
     base_df = filter_context.filtered_no_operator
     if operator_selected and not base_df.empty:
-        op_df = (
-            base_df[base_df["operador"].isin(operator_selected)]
-            if "operador" in base_df
-            else base_df
-        )
+        op_df = _filter_by_operator_selection(base_df, operator_selected)
         total_base = (
             base_df["quantidade_produzida"].sum()
             if "quantidade_produzida" in base_df

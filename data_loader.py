@@ -252,10 +252,11 @@ def _normalize_loaded_frame(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         df_raw["data_producao"] = data_producao
 
     if "operadores" in df_raw.columns:
-        df_raw["operadores_list"] = df_raw["operadores"].apply(_parse_operators)
-        df_raw = df_raw.explode("operadores_list")
-        df_raw["operador"] = df_raw["operadores_list"].fillna("").astype(str).str.strip()
-        df_raw = df_raw.drop(columns=["operadores", "operadores_list"])
+        df_raw["operadores_lista"] = df_raw["operadores"].apply(_parse_operators)
+        df_raw["operador"] = df_raw["operadores_lista"].apply(
+            lambda values: "; ".join(values) if values else ""
+        )
+        df_raw = df_raw.drop(columns=["operadores"])
         df_raw = df_raw.reset_index(drop=True)
 
     for col in ["quantidade_produzida", "pecas_mortas"]:
