@@ -138,7 +138,8 @@ def main() -> None:
         with st.sidebar:
             st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
             st.caption(f"Fonte em uso: {latest.name}")
-        filtered, filter_context = apply_filters(df)
+        period_mode = "month" if selected_tab == "Painel de Produção" else "date"
+        filtered, filter_context = apply_filters(df, period_mode=period_mode)
     else:
         filtered = df
         filter_context = _build_unfiltered_context(df)

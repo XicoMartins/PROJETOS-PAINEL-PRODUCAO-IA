@@ -144,7 +144,96 @@ def _filter_by_operator_selection(
     return _filter_by_selection(frame, "operador_clean", selected_values)
 
 
-def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
+def _format_month_key(month_key: str) -> str:
+    month_names = {
+        1: "Jan",
+        2: "Fev",
+        3: "Mar",
+        4: "Abr",
+        5: "Mai",
+        6: "Jun",
+        7: "Jul",
+        8: "Ago",
+        9: "Set",
+        10: "Out",
+        11: "Nov",
+        12: "Dez",
+    }
+    period = pd.Period(month_key, freq="M")
+    return f"{month_names.get(period.month, str(period.month))}/{period.year}"
+
+
+def _sanitize_month_range_state(key: str, options: list[str]) -> tuple[str, str]:
+    default = (options[0], options[-1])
+    current = st.session_state.get(key)
+    if not isinstance(current, (list, tuple)) or len(current) != 2:
+        st.session_state[key] = default
+        return default
+
+    start, end = str(current[0]), str(current[1])
+    if start not in options or end not in options:
+        st.session_state[key] = default
+        return default
+
+    start_idx = options.index(start)
+    end_idx = options.index(end)
+    if start_idx > end_idx:
+        sanitized = (end, start)
+        st.session_state[key] = sanitized
+        return sanitized
+    return (start, end)
+
+
+def _month_key_to_date_range(month_key: str) -> tuple[date, date]:
+    period = pd.Period(month_key, freq="M")
+    return period.start_time.date(), period.end_time.date()
+
+
+def _render_month_range_filter(dates: pd.Series) -> tuple[date, date] | None:
+    parsed_dates = pd.to_datetime(dates, errors="coerce").dropna()
+    if parsed_dates.empty:
+        return None
+
+    periods = parsed_dates.dt.to_period("M")
+    options = [str(period) for period in sorted(periods.unique())]
+    if not options:
+        return None
+
+    key = "filter_month_range"
+    current_range = _sanitize_month_range_state(key, options)
+    start_label = _format_month_key(current_range[0])
+    end_label = _format_month_key(current_range[1])
+
+    st.markdown(
+        f"""
+        <div class="month-range-filter">
+            <div class="month-range-title">Intervalo de Meses</div>
+            <div class="month-range-labels">
+                <span>{start_label}</span>
+                <span>{end_label}</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    selected_range = st.select_slider(
+        "Intervalo de Meses",
+        options=options,
+        value=current_range,
+        format_func=_format_month_key,
+        key=key,
+        label_visibility="collapsed",
+    )
+    start_date, _ = _month_key_to_date_range(selected_range[0])
+    _, end_date = _month_key_to_date_range(selected_range[1])
+    return start_date, end_date
+
+
+def apply_filters(
+    df: pd.DataFrame,
+    *,
+    period_mode: str = "date",
+) -> tuple[pd.DataFrame, FilterContext]:
     if df.empty:
         return df, FilterContext(filtered_no_operator=df.copy())
 
@@ -188,12 +277,15 @@ def apply_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, FilterContext]:
         st.header("Filtros")
         date_range: tuple[date | None, date | None] | None = None
         if min_date is not None and max_date is not None:
-            date_range = st.date_input(
-                "Periodo",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date,
-            )
+            if period_mode == "month":
+                date_range = _render_month_range_filter(dates)
+            else:
+                date_range = st.date_input(
+                    "Periodo",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date,
+                )
 
         displays = (
             _sorted_unique(df_filter["display_clean"])

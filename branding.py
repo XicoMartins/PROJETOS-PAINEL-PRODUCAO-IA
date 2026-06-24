@@ -138,6 +138,30 @@ def apply_branding(*, show_header: bool = True, use_background: bool = True) -> 
         section[data-testid="stSidebar"] .stMarkdown p {{
             font-size: 0.94rem;
         }}
+        .month-range-filter {{
+            margin: 0.45rem 0 0.15rem;
+        }}
+        .month-range-title {{
+            font-size: 0.94rem;
+            font-weight: 700;
+            margin-bottom: 0.38rem;
+            color: #f5f7f8;
+        }}
+        .month-range-labels {{
+            display: flex;
+            justify-content: flex-end;
+            gap: 2rem;
+            color: #ff5b64;
+            font-size: 1rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }}
+        section[data-testid="stSidebar"] .stSlider {{
+            padding-top: 0;
+        }}
+        section[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] > div {{
+            background-color: rgba(255, 255, 255, 0.22);
+        }}
         .dashboard-heading {{
             margin-bottom: 1.25rem;
         }}
