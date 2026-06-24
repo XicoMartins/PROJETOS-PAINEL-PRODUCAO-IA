@@ -4,7 +4,7 @@ import streamlit as st
 
 from branding import apply_branding
 from data_loader import load_data
-from filters import apply_filters
+from filters import FilterContext, apply_filters
 from panel_views import (
     render_charts,
     render_data_quality,
@@ -18,7 +18,7 @@ from panel_views import (
 APP_VERSION = "13.1.0"
 
 
-def _render_dashboard_header(selected_source_label: str, latest, quality: dict) -> None:
+def _render_dashboard_title() -> None:
     st.markdown(
         f"""
         <div class="dashboard-heading">
@@ -28,6 +28,22 @@ def _render_dashboard_header(selected_source_label: str, latest, quality: dict) 
         """,
         unsafe_allow_html=True,
     )
+
+
+def _render_data_source_picker(data_sources: dict[str, str]) -> str:
+    options = list(data_sources.keys())
+    selected_label = st.session_state.get("data_source_label", options[0])
+    if selected_label not in data_sources:
+        selected_label = options[0]
+    return st.selectbox(
+        "Fonte dos dados",
+        options,
+        index=options.index(selected_label),
+        key="data_source_label",
+    )
+
+
+def _render_data_status(selected_source_label: str, latest, quality: dict) -> None:
     with st.expander("Status das Bases de Dados (Verificar Atualizações)"):
         st.write(f"Fonte selecionada: {selected_source_label}")
         if latest is not None:
@@ -45,8 +61,8 @@ def _render_section_title(title: str) -> None:
     st.markdown(f"## {title}")
 
 
-def _render_placeholder(title: str, description: str) -> None:
-    st.info(f"{title}: {description}")
+def _build_unfiltered_context(df) -> FilterContext:
+    return FilterContext(filtered_no_operator=df.copy())
 
 
 def main() -> None:
@@ -65,15 +81,16 @@ def main() -> None:
     }
     nav_tabs = [
         "Geral",
-        "Saídas",
-        "Estoque",
-        "Pendências",
-        "Follow-Up",
-        "Análise Crítica",
-        "Forecast",
-        "MIF Analytics",
-        "Metodologia",
+        "Painel Display",
+        "Gráficos",
+        "Registros",
+        "Integridade",
+        "Painel TV",
+        "Painel de Produção",
     ]
+    if st.session_state.get("dashboard_sidebar_tab") not in [None, *nav_tabs]:
+        st.session_state["dashboard_sidebar_tab"] = "Geral"
+
     with st.sidebar:
         st.markdown('<div class="sidebar-nav-spacer"></div>', unsafe_allow_html=True)
         selected_tab = st.radio(
@@ -83,13 +100,18 @@ def main() -> None:
             key="dashboard_sidebar_tab",
             label_visibility="collapsed",
         )
-        st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
-        st.caption("Fonte dos dados")
-        selected_label = st.selectbox(
-            "Base de dados",
-            list(data_sources.keys()),
-            label_visibility="collapsed",
+
+    _render_dashboard_title()
+
+    if selected_tab == "Geral":
+        selected_label = _render_data_source_picker(data_sources)
+    else:
+        selected_label = st.session_state.get(
+            "data_source_label",
+            list(data_sources.keys())[0],
         )
+        if selected_label not in data_sources:
+            selected_label = list(data_sources.keys())[0]
     selected_source = data_sources[selected_label]
 
     df, latest, quality = load_data(selected_source)
@@ -106,44 +128,45 @@ def main() -> None:
         else:
             st.error("Nenhum arquivo CSV encontrado na pasta de saida.")
         st.stop()
-    with st.sidebar:
-        st.caption(f"Fonte em uso: {latest.name}")
 
-    filtered, filter_context = apply_filters(df)
-
-    _render_dashboard_header(selected_label, latest, quality)
+    tabs_with_filters = {
+        "Painel Display",
+        "Gráficos",
+        "Registros",
+        "Painel TV",
+        "Painel de Produção",
+    }
+    if selected_tab in tabs_with_filters:
+        with st.sidebar:
+            st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
+            st.caption(f"Fonte em uso: {latest.name}")
+        filtered, filter_context = apply_filters(df)
+    else:
+        filtered = df
+        filter_context = _build_unfiltered_context(df)
 
     if selected_tab == "Geral":
         _render_section_title("Visão Geral de Negócios")
+        _render_data_status(selected_label, latest, quality)
         render_kpis(filtered, filter_context)
+    elif selected_tab == "Painel Display":
+        _render_section_title("Painel Display")
         render_display_panel(filtered, filter_context)
-    elif selected_tab == "Saídas":
-        _render_section_title("Saídas")
-        render_production_dashboard(filtered)
-    elif selected_tab == "Estoque":
-        _render_section_title("Estoque")
+    elif selected_tab == "Gráficos":
+        _render_section_title("Gráficos")
+        render_charts(filtered, filter_context)
+    elif selected_tab == "Registros":
+        _render_section_title("Registros")
         render_filtered_table(filtered, filter_context)
-    elif selected_tab == "Pendências":
-        _render_section_title("Pendências")
+    elif selected_tab == "Integridade":
+        _render_section_title("Integridade dos Dados")
         render_data_quality(df, quality)
-    elif selected_tab == "Follow-Up":
-        _render_section_title("Follow-Up")
+    elif selected_tab == "Painel TV":
+        _render_section_title("Painel TV")
         render_tv_panel(filtered, filter_context)
-    elif selected_tab == "Análise Crítica":
-        _render_section_title("Análise Crítica")
-        render_charts(filtered, filter_context)
-    elif selected_tab == "Forecast":
-        _render_section_title("Forecast")
-        render_charts(filtered, filter_context)
-    elif selected_tab == "MIF Analytics":
-        _render_section_title("MIF Analytics")
+    elif selected_tab == "Painel de Produção":
+        _render_section_title("Painel de Produção")
         render_production_dashboard(filtered)
-    else:
-        _render_section_title("Metodologia")
-        _render_placeholder(
-            "Metodologia",
-            "documente aqui os critérios de cálculo, atualização e governança do painel.",
-        )
 
 
 if __name__ == "__main__":
