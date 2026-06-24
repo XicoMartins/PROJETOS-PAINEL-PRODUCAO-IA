@@ -218,6 +218,20 @@ def apply_branding(*, show_header: bool = True, use_background: bool = True) -> 
             line-height: 1.1;
             overflow-wrap: anywhere;
         }}
+        .kpi-datetime-card {{
+            min-height: 96px;
+        }}
+        .kpi-datetime-date {{
+            white-space: nowrap;
+            overflow-wrap: normal;
+        }}
+        .kpi-datetime-time {{
+            margin-top: 0.18rem;
+            font-size: clamp(1rem, 0.45vw + 0.85rem, 1.35rem);
+            font-weight: 700;
+            line-height: 1.1;
+            color: #d7e4f3;
+        }}
         .kpi-name {{
             font-size: clamp(1rem, 0.7vw + 0.8rem, 1.45rem);
             font-weight: 700;

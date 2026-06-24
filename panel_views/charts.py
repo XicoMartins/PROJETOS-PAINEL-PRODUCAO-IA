@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from html import escape
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -20,6 +22,29 @@ from services.planilha_service import (
     build_remaining_by_process,
     validate_planilha_configuration,
 )
+
+
+def _render_last_update_card(title: str, value: str) -> None:
+    date_value = value
+    time_value = None
+    if value != "N/A" and " " in value:
+        date_value, time_value = value.split(" ", 1)
+
+    time_html = (
+        f'<div class="kpi-datetime-time">{escape(time_value)}</div>'
+        if time_value
+        else ""
+    )
+    st.markdown(
+        f"""
+        <div class="kpi-card kpi-datetime-card">
+            <div class="kpi-title">{escape(title)}</div>
+            <div class="kpi-value kpi-datetime-date">{escape(date_value)}</div>
+            {time_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_kpis(df: pd.DataFrame, filter_context: FilterContext) -> None:
@@ -45,7 +70,8 @@ def render_kpis(df: pd.DataFrame, filter_context: FilterContext) -> None:
     else:
         col1, col2, col3, col4 = st.columns(4)
     col1.metric("Registros", f"{total_registros:,}".replace(",", "."))
-    col2.metric(update_title, update_value)
+    with col2:
+        _render_last_update_card(update_title, update_value)
     col3.metric("Producao total", f"{total_produzida:,.0f}".replace(",", "."))
     col4.metric("Pecas mortas", f"{pecas_mortas:,.0f}".replace(",", "."))
     if processo_total_label:
