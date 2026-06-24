@@ -40,6 +40,7 @@ def _render_data_source_picker(data_sources: dict[str, str]) -> str:
         options,
         index=options.index(selected_label),
         key="data_source_label",
+        disabled=len(options) == 1,
     )
 
 
@@ -75,9 +76,6 @@ def main() -> None:
 
     data_sources = {
         "FORMS-MTECH (PostgreSQL)": "forms_postgres",
-        "BASE DE DADOS FORMS (CSV legado)": "forms",
-        "BASE ATUAL (registros.csv legado)": "base_atual",
-        "BASE SQLITE legado (db.sqlite3)": "sqlite",
     }
     nav_tabs = [
         "Geral",
