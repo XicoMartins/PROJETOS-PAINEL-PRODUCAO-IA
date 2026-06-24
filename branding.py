@@ -15,12 +15,12 @@ def _load_base64(path: Path) -> str | None:
     return base64.b64encode(path.read_bytes()).decode("ascii")
 
 
-def apply_branding() -> None:
+def apply_branding(*, show_header: bool = True, use_background: bool = True) -> None:
     logo_b64 = _load_base64(LOGO_PATH)
     bg_b64 = _load_base64(BACKGROUND_PATH)
 
     css_parts = []
-    if bg_b64:
+    if use_background and bg_b64:
         css_parts.append(
             f"""
             .stApp {{
@@ -32,6 +32,7 @@ def apply_branding() -> None:
     css_parts.append(
         f"""
         .stApp {{
+            background: #0d1117;
             color: #f5f7f8;
             --app-title-size: clamp(2rem, 2vw + 1.2rem, 3.2rem);
             --section-title-size: clamp(1.2rem, 1vw + 0.8rem, 2rem);
@@ -41,8 +42,14 @@ def apply_branding() -> None:
             --panel-value-size: clamp(1.2rem, 0.9vw + 0.9rem, 1.9rem);
             --panel-sub-size: clamp(0.78rem, 0.35vw + 0.7rem, 1rem);
         }}
+        header[data-testid="stHeader"] {{
+            background: #0d1117;
+        }}
         .block-container {{
-            padding-top: clamp(1rem, 2vw, 2rem);
+            max-width: 960px;
+            padding-top: clamp(4.5rem, 8vw, 7.5rem);
+            padding-left: clamp(2rem, 6vw, 5rem);
+            padding-right: clamp(2rem, 6vw, 5rem);
         }}
         .stApp h1 {{
             font-size: var(--app-title-size);
@@ -55,9 +62,85 @@ def apply_branding() -> None:
             word-break: break-word;
         }}
         section.main > div:first-child {{
-            background: {SURFACE};
-            border-radius: 12px;
-            padding: 12px;
+            background: transparent;
+            border-radius: 0;
+            padding: 0;
+        }}
+        section[data-testid="stSidebar"] {{
+            background: #2a2b34;
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            min-width: 296px !important;
+            width: 296px !important;
+        }}
+        section[data-testid="stSidebar"] > div {{
+            background: #2a2b34;
+            padding-top: 4.75rem;
+        }}
+        section[data-testid="stSidebar"] * {{
+            color: #e7e9f0;
+        }}
+        .sidebar-nav-spacer {{
+            height: 0.15rem;
+        }}
+        .sidebar-divider {{
+            height: 1px;
+            margin: 1.65rem 0 1.15rem;
+            background: rgba(255, 255, 255, 0.14);
+        }}
+        section[data-testid="stSidebar"] div[role="radiogroup"] {{
+            gap: 0.2rem;
+        }}
+        section[data-testid="stSidebar"] div[role="radiogroup"] label {{
+            min-height: 28px;
+            border-radius: 6px;
+            padding: 0.24rem 0.55rem;
+            margin: 0;
+            transition: background 120ms ease, color 120ms ease;
+        }}
+        section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {{
+            background: rgba(255, 255, 255, 0.08);
+        }}
+        section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {{
+            background: #50525f;
+        }}
+        section[data-testid="stSidebar"] div[role="radiogroup"] label > div:first-child {{
+            display: none;
+        }}
+        section[data-testid="stSidebar"] div[role="radiogroup"] p {{
+            font-size: 0.86rem;
+            font-weight: 600;
+            line-height: 1.2;
+        }}
+        .dashboard-heading {{
+            margin-bottom: 1.25rem;
+        }}
+        .dashboard-heading h1 {{
+            margin: 0 0 1.25rem;
+            font-size: clamp(2.1rem, 1.5vw + 1.7rem, 3rem);
+            font-weight: 800;
+            letter-spacing: 0;
+            line-height: 1.08;
+        }}
+        .dashboard-version {{
+            color: rgba(245, 247, 248, 0.68);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }}
+        .section-divider {{
+            height: 1px;
+            margin: 3rem 0 2.5rem;
+            background: rgba(255, 255, 255, 0.18);
+        }}
+        div[data-testid="stExpander"] {{
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 7px;
+            background: transparent;
+            margin-bottom: 0;
+        }}
+        div[data-testid="stExpander"] summary {{
+            min-height: 38px;
+            font-weight: 700;
+            color: #f5f7f8;
         }}
         .stMetric {{
             background: {SURFACE};
@@ -213,15 +296,16 @@ def apply_branding() -> None:
     if css_parts:
         st.markdown("<style>" + "\n".join(css_parts) + "</style>", unsafe_allow_html=True)
 
-    header_cols = st.columns([1, 4])
-    if logo_b64:
-        header_cols[0].markdown(
-            f'<img src="data:image/png;base64,{logo_b64}" style="max-height:80px;">',
-            unsafe_allow_html=True,
-        )
-    else:
-        header_cols[0].markdown("## MTECH")
-    header_cols[1].markdown("### Displays com tecnologia")
+    if show_header:
+        header_cols = st.columns([1, 4])
+        if logo_b64:
+            header_cols[0].markdown(
+                f'<img src="data:image/png;base64,{logo_b64}" style="max-height:80px;">',
+                unsafe_allow_html=True,
+            )
+        else:
+            header_cols[0].markdown("## MTECH")
+        header_cols[1].markdown("### Displays com tecnologia")
 
     px.defaults.color_discrete_sequence = [PRIMARY, PRIMARY_LIGHT, PRIMARY_DARK, "#111111"]
     px.defaults.template = "plotly_dark"
