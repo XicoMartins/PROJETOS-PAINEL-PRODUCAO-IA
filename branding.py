@@ -46,8 +46,8 @@ def apply_branding(*, show_header: bool = True, use_background: bool = True) -> 
             background: #0d1117;
         }}
         .block-container {{
-            max-width: 960px;
-            padding-top: clamp(4.5rem, 8vw, 7.5rem);
+            max-width: 1180px;
+            padding-top: clamp(4rem, 6vw, 6.25rem);
             padding-left: clamp(2rem, 6vw, 5rem);
             padding-right: clamp(2rem, 6vw, 5rem);
         }}
@@ -69,12 +69,22 @@ def apply_branding(*, show_header: bool = True, use_background: bool = True) -> 
         section[data-testid="stSidebar"] {{
             background: #2a2b34;
             border-right: 1px solid rgba(255, 255, 255, 0.08);
-            min-width: 296px !important;
-            width: 296px !important;
+            min-width: 300px !important;
+            width: 300px !important;
+            max-width: 300px !important;
         }}
         section[data-testid="stSidebar"] > div {{
             background: #2a2b34;
             padding-top: 4.75rem;
+        }}
+        section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{
+            width: 300px !important;
+            min-width: 300px !important;
+            max-width: 300px !important;
+        }}
+        section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
+            padding-left: 1rem;
+            padding-right: 1rem;
         }}
         section[data-testid="stSidebar"] * {{
             color: #e7e9f0;
@@ -88,12 +98,16 @@ def apply_branding(*, show_header: bool = True, use_background: bool = True) -> 
             background: rgba(255, 255, 255, 0.14);
         }}
         section[data-testid="stSidebar"] div[role="radiogroup"] {{
-            gap: 0.2rem;
+            gap: 0.32rem;
+            width: 100%;
         }}
         section[data-testid="stSidebar"] div[role="radiogroup"] label {{
-            min-height: 28px;
+            align-items: center;
+            display: flex !important;
+            min-height: 38px;
+            width: 100%;
             border-radius: 6px;
-            padding: 0.24rem 0.55rem;
+            padding: 0.42rem 0.72rem;
             margin: 0;
             transition: background 120ms ease, color 120ms ease;
         }}
@@ -107,9 +121,22 @@ def apply_branding(*, show_header: bool = True, use_background: bool = True) -> 
             display: none;
         }}
         section[data-testid="stSidebar"] div[role="radiogroup"] p {{
-            font-size: 0.86rem;
-            font-weight: 600;
-            line-height: 1.2;
+            font-size: 0.98rem;
+            font-weight: 700;
+            line-height: 1.25;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }}
+        section[data-testid="stSidebar"] [data-baseweb="select"] {{
+            min-height: 42px;
+        }}
+        section[data-testid="stSidebar"] [data-baseweb="select"] > div {{
+            min-height: 42px;
+        }}
+        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] .stCaptionContainer,
+        section[data-testid="stSidebar"] .stMarkdown p {{
+            font-size: 0.94rem;
         }}
         .dashboard-heading {{
             margin-bottom: 1.25rem;
