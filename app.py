@@ -22,7 +22,7 @@ def _render_dashboard_header(selected_source_label: str, latest, quality: dict) 
     st.markdown(
         f"""
         <div class="dashboard-heading">
-            <h1>Dashboard Konica Minolta</h1>
+            <h1>Dashboard MTECH Displays</h1>
             <div class="dashboard-version">Versão {APP_VERSION}</div>
         </div>
         """,
@@ -51,7 +51,7 @@ def _render_placeholder(title: str, description: str) -> None:
 
 def main() -> None:
     st.set_page_config(
-        "Dashboard Konica Minolta",
+        "Dashboard MTECH Displays",
         layout="wide",
         initial_sidebar_state="expanded",
     )
