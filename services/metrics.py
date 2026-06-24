@@ -97,7 +97,6 @@ def resolve_last_update_metric(
 
     maquinario_selected = filter_context.maquinario_selected
     processo_selected = filter_context.processo_selected
-    show_time = bool(maquinario_selected or processo_selected)
 
     if processo_selected:
         title = "Ult. atualizacao processo"
@@ -111,7 +110,7 @@ def resolve_last_update_metric(
         latest_date = pd.to_datetime(base_df["data_producao"], errors="coerce")
 
     latest_datetime = None
-    if show_time and latest_date is not None and latest_date.notna().any():
+    if latest_date is not None and latest_date.notna().any():
         time_source = None
         for col in ["hora_conclusao", "hora_inicio"]:
             if col not in base_df.columns:
@@ -137,7 +136,7 @@ def resolve_last_update_metric(
         if parsed_timestamp.notna().any():
             latest_datetime = parsed_timestamp
 
-    if show_time and latest_datetime is not None:
+    if latest_datetime is not None:
         latest_value = latest_datetime.dropna().max()
         if pd.notna(latest_value):
             return title, format_datetime(latest_value)
@@ -150,7 +149,7 @@ def resolve_last_update_metric(
     if latest_datetime is not None:
         latest_value = latest_datetime.dropna().max()
         if pd.notna(latest_value):
-            return title, format_date(latest_value)
+            return title, format_datetime(latest_value)
 
     return title, "N/A"
 
