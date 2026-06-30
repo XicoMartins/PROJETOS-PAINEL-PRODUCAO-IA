@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import os
+import secrets as secrets_lib
+
 import streamlit as st
 
 from branding import apply_branding
@@ -16,6 +21,109 @@ from panel_views import (
 )
 
 APP_VERSION = "13.1.0"
+AUTH_SESSION_KEY = "auth_authenticated"
+AUTH_USER_KEY = "auth_user"
+
+
+def build_password_hash(password: str, salt: str | None = None, iterations: int = 260000) -> str:
+    salt = salt or secrets_lib.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        iterations,
+    ).hex()
+    return f"pbkdf2_sha256${iterations}${salt}${digest}"
+
+
+def verify_password(password: str, stored_password: str) -> bool:
+    stored_password = str(stored_password or "")
+    if stored_password.startswith("pbkdf2_sha256$"):
+        try:
+            _algorithm, iterations, salt, expected = stored_password.split("$", 3)
+            candidate = build_password_hash(password, salt=salt, iterations=int(iterations))
+            candidate_hash = candidate.rsplit("$", 1)[-1]
+        except (TypeError, ValueError):
+            return False
+        return hmac.compare_digest(candidate_hash, expected)
+    return hmac.compare_digest(password, stored_password)
+
+
+def _get_auth_secret(key: str):
+    try:
+        auth_config = st.secrets.get("auth", {})
+        if key in auth_config:
+            return auth_config.get(key)
+    except Exception:
+        pass
+    return os.getenv(f"AUTH_{key.upper()}")
+
+
+def get_auth_users() -> dict[str, str]:
+    users = {}
+    try:
+        auth_config = st.secrets.get("auth", {})
+        configured_users = auth_config.get("users", {})
+        if hasattr(configured_users, "items"):
+            users.update({str(user): str(password) for user, password in configured_users.items()})
+    except Exception:
+        pass
+
+    username = _get_auth_secret("username")
+    password_hash = _get_auth_secret("password_hash")
+    password = _get_auth_secret("password")
+    if username and (password_hash or password):
+        users[str(username)] = str(password_hash or password)
+
+    return users
+
+
+def render_login_screen(users: dict[str, str]) -> None:
+    st.markdown('<div class="panel-card">', unsafe_allow_html=True)
+    st.markdown("### Acesso restrito")
+
+    if not users:
+        st.error("Login nao configurado. Configure usuario e senha nos Secrets do Streamlit Cloud.")
+        st.code(
+            '[auth.users]\n'
+            'admin = "pbkdf2_sha256$260000$..."',
+            language="toml",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+
+    with st.form("login_form"):
+        username = st.text_input("Usuario")
+        password = st.text_input("Senha", type="password")
+        entrar = st.form_submit_button("Entrar")
+
+    if entrar:
+        stored_password = users.get(username)
+        if stored_password and verify_password(password, stored_password):
+            st.session_state[AUTH_SESSION_KEY] = True
+            st.session_state[AUTH_USER_KEY] = username
+            st.rerun()
+        else:
+            st.error("Usuario ou senha invalidos.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def require_authentication() -> None:
+    if st.session_state.get(AUTH_SESSION_KEY):
+        return
+    render_login_screen(get_auth_users())
+    st.stop()
+
+
+def render_logout_control() -> None:
+    user = st.session_state.get(AUTH_USER_KEY, "")
+    if user:
+        st.caption(f"Usuario: {user}")
+    if st.button("Sair"):
+        st.session_state.pop(AUTH_SESSION_KEY, None)
+        st.session_state.pop(AUTH_USER_KEY, None)
+        st.rerun()
 
 
 def _render_dashboard_title() -> None:
@@ -73,6 +181,7 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
     apply_branding(show_header=False, use_background=False)
+    require_authentication()
 
     data_sources = {
         "FORMS-MTECH (PostgreSQL)": "forms_postgres",
@@ -90,6 +199,8 @@ def main() -> None:
         st.session_state["dashboard_sidebar_tab"] = "Geral"
 
     with st.sidebar:
+        render_logout_control()
+        st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
         st.markdown('<div class="sidebar-nav-spacer"></div>', unsafe_allow_html=True)
         selected_tab = st.radio(
             "Navegação",

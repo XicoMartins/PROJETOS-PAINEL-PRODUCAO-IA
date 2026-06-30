@@ -13,6 +13,34 @@ Configure nos Secrets do Streamlit Cloud:
 DATABASE_URL = "postgresql://usuario:senha@host:5432/banco?sslmode=require"
 ```
 
+## Login de acesso
+
+O painel exige usuario e senha antes de mostrar dados, filtros, graficos e tabelas.
+Use o mesmo formato de Secrets do app FORMS-MTECH.
+
+Para gerar o hash da senha:
+
+```powershell
+python scripts/gerar_hash_senha.py
+```
+
+Para um unico usuario:
+
+```toml
+[auth]
+username = "seu_usuario"
+password_hash = "pbkdf2_sha256$260000$..."
+```
+
+Para varios usuarios:
+
+```toml
+[auth.users]
+admin = "pbkdf2_sha256$260000$..."
+pcp = "pbkdf2_sha256$260000$..."
+producao = "pbkdf2_sha256$260000$..."
+```
+
 ## Deploy no Streamlit Cloud
 
 1. Suba esta pasta em um repositorio GitHub.
