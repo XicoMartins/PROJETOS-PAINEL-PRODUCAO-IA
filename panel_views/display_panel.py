@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from filters import FilterContext
 from panel_views.common import (
@@ -120,33 +121,33 @@ def _compute_prod_hora_summary(df: pd.DataFrame) -> dict[str, object] | None:
 def _build_tv_time_card(summary) -> str:
     if summary.remaining is not None and summary.remaining <= 0:
         values = [
-            ("Melhor cen&aacute;rio", "Concluido", "good"),
-            ("Cen&aacute;rio m&eacute;dio", "Concluido", "neutral"),
-            ("Pior cen&aacute;rio", "Concluido", "bad"),
+            ("Melhor cenário", "Concluído", "good"),
+            ("Cenário médio", "Concluído", "neutral"),
+            ("Pior cenário", "Concluído", "bad"),
         ]
     elif summary.time_estimate is not None:
         values = [
             (
-                "Melhor cen&aacute;rio",
+                "Melhor cenário",
                 _format_tv_duration(summary.time_estimate.best_hours),
                 "good",
             ),
             (
-                "Cen&aacute;rio m&eacute;dio",
+                "Cenário médio",
                 _format_tv_duration(summary.time_estimate.avg_hours),
                 "neutral",
             ),
             (
-                "Pior cen&aacute;rio",
+                "Pior cenário",
                 _format_tv_duration(summary.time_estimate.worst_hours),
                 "bad",
             ),
         ]
     else:
         values = [
-            ("Melhor cen&aacute;rio", "N/A", "good"),
-            ("Cen&aacute;rio m&eacute;dio", "N/A", "neutral"),
-            ("Pior cen&aacute;rio", "N/A", "bad"),
+            ("Melhor cenário", "N/A", "good"),
+            ("Cenário médio", "N/A", "neutral"),
+            ("Pior cenário", "N/A", "bad"),
         ]
 
     items = "".join(
@@ -215,9 +216,9 @@ def _render_tv_dashboard(
     remaining_text = "Sem meta"
     remaining_unit_html = ""
     if summary.remaining is not None:
-        remaining_text = "Concluido" if summary.remaining <= 0 else format_int(summary.remaining)
+        remaining_text = "Concluído" if summary.remaining <= 0 else format_int(summary.remaining)
         if summary.remaining > 0:
-            remaining_unit_html = '<span class="tv-number-sub">pe&ccedil;as</span>'
+            remaining_unit_html = '<span class="tv-number-sub">peças</span>'
 
     image_uri = load_image_as_data_uri(image_path) if image_path else None
     image_html = (
@@ -236,7 +237,7 @@ def _render_tv_dashboard(
                 "good",
             ),
             _build_tv_prod_card(
-                "M&eacute;dia prod/hora",
+                "Média prod/hora",
                 _format_tv_decimal(prod_summary["avg_value"]),
                 "Apontamentos",
                 "neutral",
@@ -251,7 +252,7 @@ def _render_tv_dashboard(
     else:
         footer_cards = [
             _build_tv_prod_card("Melhor prod/hora", "N/A", "Sem dados", "good"),
-            _build_tv_prod_card("M&eacute;dia prod/hora", "N/A", "Apontamentos", "neutral"),
+            _build_tv_prod_card("Média prod/hora", "N/A", "Apontamentos", "neutral"),
             _build_tv_prod_card("Pior prod/hora", "N/A", "Sem dados", "bad"),
         ]
 
@@ -259,35 +260,67 @@ def _render_tv_dashboard(
     footer_html = "".join(footer_cards)
 
     st.markdown(
-        textwrap.dedent(
-            f"""
+        """
         <style>
-        section.main > div:first-child {{
-            padding: 0.65rem 1.25rem 0.75rem;
-        }}
-        .block-container {{
-            max-width: 100%;
+        .dashboard-heading,
+        .section-divider,
+        section.main h2 {
+            display: none !important;
+        }
+        section.main > div:first-child {
             padding: 0 !important;
-        }}
-        .stApp {{
+        }
+        .block-container {
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+        iframe {
+            display: block;
+            width: 100% !important;
+            height: calc(100vh - 2px) !important;
+            border: 0;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    panel_html = textwrap.dedent(
+        f"""
+        <!doctype html>
+        <html lang="pt-BR">
+        <head>
+        <meta charset="utf-8">
+        <style>
+        :root {{
             background:
                 radial-gradient(circle at 22% 38%, rgba(11, 88, 97, 0.22), transparent 34%),
                 linear-gradient(135deg, #020914 0%, #061522 48%, #02070f 100%);
             color: #f5f7f8;
         }}
-        .stApp h1,
-        [data-testid="stHeader"] {{
-            display: none;
+        * {{
+            box-sizing: border-box;
+        }}
+        html,
+        body {{
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 22% 38%, rgba(11, 88, 97, 0.22), transparent 34%),
+                linear-gradient(135deg, #020914 0%, #061522 48%, #02070f 100%);
         }}
         .tv-dashboard {{
             box-sizing: border-box;
-            height: calc(100vh - 24px);
-            min-height: 640px;
+            width: 100%;
+            height: 100vh;
+            min-height: 620px;
             display: grid;
             grid-template-rows: auto minmax(0, 1fr) auto;
-            gap: clamp(0.65rem, 1.1vh, 1rem);
+            gap: clamp(0.55rem, 0.95vh, 0.9rem);
             overflow: hidden;
-            padding: clamp(0.75rem, 1.4vw, 1.45rem);
+            padding: clamp(0.65rem, 1.15vw, 1.2rem);
             font-family: "Segoe UI", Arial, sans-serif;
         }}
         .tv-header {{
@@ -306,7 +339,7 @@ def _render_tv_dashboard(
         }}
         .tv-title {{
             color: #ffffff;
-            font-size: clamp(2.55rem, 4vw, 4.7rem);
+            font-size: clamp(2.25rem, 3.5vw, 4.25rem);
             line-height: 0.98;
             font-weight: 900;
             letter-spacing: 0;
@@ -319,7 +352,7 @@ def _render_tv_dashboard(
             gap: 0.4rem 0.8rem;
             margin-top: 0.7rem;
             color: rgba(245, 247, 248, 0.94);
-            font-size: clamp(0.95rem, 1.18vw, 1.52rem);
+            font-size: clamp(0.88rem, 1.02vw, 1.38rem);
             line-height: 1.2;
             font-weight: 600;
         }}
@@ -347,7 +380,7 @@ def _render_tv_dashboard(
             min-height: 0;
             display: grid;
             grid-template-columns: minmax(360px, 41%) minmax(520px, 59%);
-            gap: clamp(1.1rem, 2.3vw, 2.4rem);
+            gap: clamp(0.9rem, 1.85vw, 2rem);
             align-items: stretch;
         }}
         .tv-product {{
@@ -375,19 +408,19 @@ def _render_tv_dashboard(
             min-height: 0;
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(130px, 0.34fr);
-            grid-template-rows: minmax(170px, 1.3fr) minmax(120px, 0.78fr) minmax(132px, 0.86fr);
-            gap: clamp(0.65rem, 1vw, 0.95rem);
+            grid-template-rows: minmax(148px, 1.2fr) minmax(106px, 0.72fr) minmax(118px, 0.8fr);
+            gap: clamp(0.55rem, 0.85vw, 0.8rem);
             align-content: center;
         }}
         .tv-card {{
             min-width: 0;
             border: 1px solid rgba(137, 212, 218, 0.32);
-            border-radius: 18px;
+            border-radius: 16px;
             background:
                 radial-gradient(circle at 12% 12%, rgba(38, 128, 133, 0.2), transparent 38%),
                 linear-gradient(150deg, rgba(4, 46, 58, 0.94), rgba(3, 31, 43, 0.88));
             box-shadow: inset 0 0 22px rgba(36, 194, 202, 0.04), 0 18px 42px rgba(0, 0, 0, 0.18);
-            padding: clamp(1rem, 1.35vw, 1.55rem);
+            padding: clamp(0.85rem, 1.12vw, 1.35rem);
         }}
         .tv-card-title {{
             color: rgba(245, 247, 248, 0.9);
@@ -411,7 +444,7 @@ def _render_tv_dashboard(
         }}
         .tv-production-value {{
             color: #f8fbfd;
-            font-size: clamp(4rem, 6.2vw, 8rem);
+            font-size: clamp(3.55rem, 5.35vw, 7.1rem);
             line-height: 0.9;
             font-weight: 900;
             text-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
@@ -448,7 +481,7 @@ def _render_tv_dashboard(
         }}
         .tv-number-value {{
             color: #f8fbfd;
-            font-size: clamp(3.1rem, 4.2vw, 5.75rem);
+            font-size: clamp(2.75rem, 3.65vw, 5.15rem);
             line-height: 0.9;
             font-weight: 900;
             margin-top: 0.28rem;
@@ -487,7 +520,7 @@ def _render_tv_dashboard(
             color: rgba(245, 247, 248, 0.82);
         }}
         .tv-time-value {{
-            font-size: clamp(2.35rem, 3.3vw, 4.55rem);
+            font-size: clamp(2.05rem, 2.85vw, 4rem);
             line-height: 0.98;
             font-weight: 900;
             margin-top: 0.25rem;
@@ -523,8 +556,8 @@ def _render_tv_dashboard(
             grid-template-columns: clamp(58px, 5.1vw, 94px) minmax(0, 1fr);
             align-items: center;
             gap: clamp(0.75rem, 1.35vw, 1.45rem);
-            min-height: clamp(96px, 11vh, 142px);
-            padding: clamp(0.82rem, 1.1vw, 1.25rem);
+            min-height: clamp(82px, 9.5vh, 124px);
+            padding: clamp(0.7rem, 0.95vw, 1.08rem);
             border-radius: 14px;
         }}
         .tv-footer-mark {{
@@ -570,7 +603,7 @@ def _render_tv_dashboard(
         }}
         .tv-footer-value {{
             color: #f8fbfd;
-            font-size: clamp(2.45rem, 3.55vw, 5rem);
+            font-size: clamp(2.1rem, 3vw, 4.35rem);
             line-height: 0.95;
             font-weight: 900;
             margin-top: 0.18rem;
@@ -612,14 +645,16 @@ def _render_tv_dashboard(
             }}
         }}
         </style>
+        </head>
+        <body>
         <div class="tv-dashboard">
             <header class="tv-header">
                 <div>
                     <div class="tv-kicker">Painel TV</div>
                     <div class="tv-title">{_html_text(display_name)}</div>
                     <div class="tv-meta">
-                        <span>N&uacute;mero: {_html_text(numero_text)}</span>
-                        <span>Maquin&aacute;rio: {_html_text(maquinario_text)}</span>
+                        <span>Número: {_html_text(numero_text)}</span>
+                        <span>Maquinário: {_html_text(maquinario_text)}</span>
                         <span>Processo: {_html_text(processo_text)}</span>
                     </div>
                 </div>
@@ -634,12 +669,12 @@ def _render_tv_dashboard(
                 </section>
                 <section class="tv-indicators">
                     <div class="tv-card tv-production-card">
-                        <div class="tv-card-title">PRODU&Ccedil;&Atilde;O</div>
+                        <div class="tv-card-title">PRODUÇÃO</div>
                         <div class="tv-production-line">
                             <div class="tv-production-value">{html.escape(produced_text)}</div>
                             <div class="tv-production-total">de {html.escape(total_text)}</div>
                         </div>
-                        <div class="tv-progress-text">{html.escape(percent_text)} conclu&iacute;do</div>
+                        <div class="tv-progress-text">{html.escape(percent_text)} concluído</div>
                         <div class="tv-progress-track">
                             <div class="tv-progress-fill"></div>
                         </div>
@@ -666,10 +701,11 @@ def _render_tv_dashboard(
                 {footer_html}
             </footer>
         </div>
+        </body>
+        </html>
         """,
-        ).strip(),
-        unsafe_allow_html=True,
-    )
+    ).strip()
+    components.html(panel_html, height=900, scrolling=False)
 
 
 def render_display_panel(
