@@ -185,6 +185,55 @@ def _build_tv_prod_card(
     """
 
 
+def _find_best_image(
+    image_map: dict[str, Path],
+    target_text: str,
+    context_texts: list[str] | None = None,
+) -> Path | None:
+    target_key = normalize_display_name(target_text)
+    if not target_key:
+        return None
+    if target_key in image_map:
+        return image_map[target_key]
+
+    context_keys = [
+        normalize_display_name(text)
+        for text in context_texts or []
+        if normalize_display_name(text)
+    ]
+    best_score = -1
+    best_path = None
+    for key, path in image_map.items():
+        if target_key not in key:
+            continue
+        score = 10
+        for context_key in context_keys:
+            if context_key in key:
+                score += 3
+        if key.endswith(target_key):
+            score += 2
+        if score > best_score:
+            best_score = score
+            best_path = path
+    return best_path
+
+
+def _build_tv_media_card(title: str, label: str, image_path: Path | None) -> str:
+    image_uri = load_image_as_data_uri(image_path) if image_path else None
+    image_html = (
+        f'<img src="{image_uri}" alt="{html.escape(title)}">'
+        if image_uri
+        else '<div class="tv-media-empty">Imagem não encontrada</div>'
+    )
+    return f"""
+    <div class="tv-media-card">
+        <div class="tv-media-title">{html.escape(title)}</div>
+        <div class="tv-media-frame">{image_html}</div>
+        <div class="tv-media-label">{_html_text(label)}</div>
+    </div>
+    """
+
+
 def _render_tv_dashboard(
     *,
     df: pd.DataFrame,
@@ -224,7 +273,27 @@ def _render_tv_dashboard(
     image_html = (
         f'<img src="{image_uri}" alt="Imagem do display">'
         if image_uri
-        else '<div class="tv-image-empty">Imagem do display nao encontrada</div>'
+        else '<div class="tv-image-empty">Imagem do display não encontrada</div>'
+    )
+
+    assets_root = Path(__file__).resolve().parent.parent
+    maquinario_map = build_display_image_map(assets_root / "MAQUINARIO")
+    processo_map = build_display_image_map(assets_root / "IMAGENS PROCESSOS")
+    maquinario_image_path = _find_best_image(maquinario_map, maquinario_text)
+    processo_image_path = _find_best_image(
+        processo_map,
+        processo_text,
+        [display_name, maquinario_text],
+    )
+    maquinario_card_html = _build_tv_media_card(
+        "MAQUINÁRIO",
+        maquinario_text,
+        maquinario_image_path,
+    )
+    processo_card_html = _build_tv_media_card(
+        "PROCESSO",
+        processo_text,
+        processo_image_path,
     )
 
     prod_summary = _compute_prod_hora_summary(df)
@@ -315,7 +384,7 @@ def _render_tv_dashboard(
             box-sizing: border-box;
             width: 100%;
             height: 100vh;
-            min-height: 620px;
+            min-height: 640px;
             display: grid;
             grid-template-rows: auto minmax(0, 1fr) auto;
             gap: clamp(0.55rem, 0.95vh, 0.9rem);
@@ -379,22 +448,33 @@ def _render_tv_dashboard(
         .tv-main {{
             min-height: 0;
             display: grid;
-            grid-template-columns: minmax(360px, 41%) minmax(520px, 59%);
+            grid-template-columns: minmax(380px, 41.5%) minmax(540px, 58.5%);
             gap: clamp(0.9rem, 1.85vw, 2rem);
             align-items: stretch;
         }}
+        .tv-visuals {{
+            min-height: 0;
+            display: grid;
+            grid-template-rows: minmax(0, 1fr) minmax(124px, 0.34fr);
+            gap: clamp(0.55rem, 0.85vw, 0.85rem);
+        }}
         .tv-product {{
             min-height: 0;
+            border: 1px solid rgba(137, 212, 218, 0.32);
+            border-radius: 16px;
+            background:
+                radial-gradient(circle at 26% 40%, rgba(21, 98, 111, 0.24), transparent 45%),
+                linear-gradient(150deg, rgba(3, 22, 36, 0.9), rgba(1, 11, 22, 0.9));
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 0.2rem 0 0.1rem;
+            padding: clamp(0.45rem, 0.7vw, 0.8rem);
             overflow: hidden;
         }}
         .tv-product img {{
             display: block;
-            max-width: 96%;
-            max-height: 100%;
+            max-width: 94%;
+            max-height: 98%;
             width: auto;
             height: auto;
             object-fit: contain;
@@ -403,6 +483,63 @@ def _render_tv_dashboard(
         .tv-image-empty {{
             color: rgba(245, 247, 248, 0.55);
             font-size: 1.25rem;
+        }}
+        .tv-media-grid {{
+            min-height: 0;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: clamp(0.55rem, 0.85vw, 0.85rem);
+        }}
+        .tv-media-card {{
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+            border: 1px solid rgba(137, 212, 218, 0.32);
+            border-radius: 14px;
+            background:
+                radial-gradient(circle at 18% 18%, rgba(38, 128, 133, 0.18), transparent 40%),
+                linear-gradient(150deg, rgba(4, 43, 54, 0.94), rgba(3, 25, 38, 0.9));
+            padding: clamp(0.38rem, 0.62vw, 0.68rem);
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+            gap: 0.22rem;
+        }}
+        .tv-media-title {{
+            color: rgba(245, 247, 248, 0.92);
+            font-size: clamp(0.78rem, 0.9vw, 1.12rem);
+            font-weight: 800;
+            line-height: 1;
+            text-transform: uppercase;
+        }}
+        .tv-media-frame {{
+            min-height: 0;
+            overflow: hidden;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .tv-media-frame img {{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }}
+        .tv-media-label {{
+            color: rgba(245, 247, 248, 0.82);
+            font-size: clamp(0.72rem, 0.9vw, 1.1rem);
+            line-height: 1.05;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }}
+        .tv-media-empty {{
+            color: rgba(245, 247, 248, 0.5);
+            font-size: clamp(0.78rem, 0.9vw, 1rem);
+            text-align: center;
+            padding: 0.25rem;
         }}
         .tv-indicators {{
             min-height: 0;
@@ -643,6 +780,11 @@ def _render_tv_dashboard(
             .tv-product {{
                 min-height: 46vh;
             }}
+            .tv-visuals,
+            .tv-media-grid {{
+                grid-template-columns: 1fr;
+                grid-template-rows: none;
+            }}
         }}
         </style>
         </head>
@@ -664,8 +806,14 @@ def _render_tv_dashboard(
                 </div>
             </header>
             <main class="tv-main">
-                <section class="tv-product">
-                    {image_html}
+                <section class="tv-visuals">
+                    <div class="tv-product">
+                        {image_html}
+                    </div>
+                    <div class="tv-media-grid">
+                        {maquinario_card_html}
+                        {processo_card_html}
+                    </div>
                 </section>
                 <section class="tv-indicators">
                     <div class="tv-card tv-production-card">
