@@ -258,6 +258,7 @@ def _render_tv_dashboard(
         "processo",
     )
     planilha_text = summary.planilha_name or "N/A"
+    process_banner_text = _html_text(processo_text).upper()
 
     target_total = summary.target_total
     produced = summary.total_produzido
@@ -390,10 +391,10 @@ def _render_tv_dashboard(
             height: 100vh;
             min-height: 640px;
             display: grid;
-            grid-template-rows: auto minmax(0, 1fr) auto;
-            gap: clamp(0.55rem, 0.95vh, 0.9rem);
+            grid-template-rows: auto auto minmax(0, 1fr) auto;
+            gap: clamp(0.45rem, 0.72vh, 0.72rem);
             overflow: hidden;
-            padding: clamp(0.65rem, 1.15vw, 1.2rem);
+            padding: clamp(0.55rem, 1vw, 1rem);
             font-family: "Segoe UI", Arial, sans-serif;
         }}
         .tv-header {{
@@ -401,7 +402,7 @@ def _render_tv_dashboard(
             grid-template-columns: minmax(0, 1fr) minmax(280px, 26vw);
             gap: 1.5rem;
             align-items: end;
-            padding-bottom: clamp(0.6rem, 1vh, 0.9rem);
+            padding-bottom: clamp(0.45rem, 0.72vh, 0.7rem);
             border-bottom: 1px solid rgba(199, 225, 229, 0.17);
         }}
         .tv-kicker {{
@@ -412,7 +413,7 @@ def _render_tv_dashboard(
         }}
         .tv-title {{
             color: #ffffff;
-            font-size: clamp(2.25rem, 3.5vw, 4.25rem);
+            font-size: clamp(2.05rem, 3.18vw, 3.95rem);
             line-height: 0.98;
             font-weight: 900;
             letter-spacing: 0;
@@ -448,6 +449,78 @@ def _render_tv_dashboard(
             font-size: 0.92em;
             font-weight: 600;
             margin-bottom: 0.22rem;
+        }}
+        .tv-process-banner {{
+            min-width: 0;
+            border: 1px solid rgba(26, 222, 240, 0.72);
+            border-radius: 16px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    rgba(26, 222, 240, 0.035) 0,
+                    rgba(26, 222, 240, 0.035) 2px,
+                    transparent 2px,
+                    transparent 12px
+                ),
+                radial-gradient(circle at 8% 50%, rgba(26, 222, 240, 0.18), transparent 18%),
+                linear-gradient(150deg, rgba(2, 33, 47, 0.96), rgba(2, 17, 31, 0.94));
+            box-shadow:
+                inset 0 0 26px rgba(26, 222, 240, 0.06),
+                0 0 18px rgba(26, 222, 240, 0.1);
+            display: grid;
+            grid-template-columns: clamp(70px, 7vw, 118px) minmax(0, 1fr);
+            align-items: center;
+            gap: clamp(0.85rem, 1.4vw, 1.7rem);
+            padding: clamp(0.55rem, 0.9vw, 0.95rem) clamp(0.9rem, 1.35vw, 1.35rem);
+        }}
+        .tv-process-icon {{
+            width: clamp(58px, 5.4vw, 92px);
+            aspect-ratio: 1;
+            border-radius: 50%;
+            border: 2px solid rgba(112, 245, 255, 0.84);
+            box-shadow:
+                inset 0 0 18px rgba(112, 245, 255, 0.18),
+                0 0 18px rgba(112, 245, 255, 0.22);
+            position: relative;
+            justify-self: center;
+        }}
+        .tv-process-icon::before,
+        .tv-process-icon::after {{
+            content: "";
+            position: absolute;
+            inset: 31%;
+            border-radius: 50%;
+            border: 8px solid rgba(144, 246, 255, 0.92);
+        }}
+        .tv-process-icon::after {{
+            inset: 43%;
+            border-width: 0;
+            background: rgba(144, 246, 255, 0.92);
+            box-shadow:
+                0 -22px 0 -5px rgba(144, 246, 255, 0.9),
+                0 22px 0 -5px rgba(144, 246, 255, 0.9),
+                -22px 0 0 -5px rgba(144, 246, 255, 0.9),
+                22px 0 0 -5px rgba(144, 246, 255, 0.9);
+        }}
+        .tv-process-label {{
+            color: #24dfff;
+            font-size: clamp(0.92rem, 1.18vw, 1.55rem);
+            line-height: 1;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 0.18rem;
+        }}
+        .tv-process-value {{
+            color: #ffffff;
+            font-size: clamp(2.7rem, 5vw, 6.35rem);
+            line-height: 0.96;
+            font-weight: 950;
+            letter-spacing: 0;
+            text-transform: uppercase;
+            text-shadow: 0 4px 18px rgba(0, 0, 0, 0.42);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }}
         .tv-main {{
             min-height: 0;
@@ -765,6 +838,7 @@ def _render_tv_dashboard(
                 overflow: visible;
             }}
             .tv-header,
+            .tv-process-banner,
             .tv-main,
             .tv-footer {{
                 grid-template-columns: 1fr;
@@ -789,6 +863,9 @@ def _render_tv_dashboard(
                 grid-template-columns: 1fr;
                 grid-template-rows: none;
             }}
+            .tv-process-value {{
+                white-space: normal;
+            }}
         }}
         </style>
         </head>
@@ -801,7 +878,6 @@ def _render_tv_dashboard(
                     <div class="tv-meta">
                         <span>Número: {_html_text(numero_text)}</span>
                         <span>Maquinário: {_html_text(maquinario_text)}</span>
-                        <span>Processo: {_html_text(processo_text)}</span>
                     </div>
                 </div>
                 <div class="tv-sheet">
@@ -809,6 +885,13 @@ def _render_tv_dashboard(
                     {_html_text(planilha_text)}
                 </div>
             </header>
+            <section class="tv-process-banner">
+                <div class="tv-process-icon" aria-hidden="true"></div>
+                <div>
+                    <div class="tv-process-label">PROCESSO ATUAL</div>
+                    <div class="tv-process-value">{process_banner_text}</div>
+                </div>
+            </section>
             <main class="tv-main">
                 <section class="tv-visuals">
                     <div class="tv-product">
