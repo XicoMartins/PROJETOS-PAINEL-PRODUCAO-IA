@@ -258,6 +258,7 @@ def _render_tv_dashboard(
         "processo",
     )
     planilha_text = summary.planilha_name or "N/A"
+    machine_banner_text = _html_text(maquinario_text).upper()
     process_banner_text = _html_text(processo_text).upper()
 
     target_total = summary.target_total
@@ -468,10 +469,19 @@ def _render_tv_dashboard(
                 inset 0 0 26px rgba(26, 222, 240, 0.06),
                 0 0 18px rgba(26, 222, 240, 0.1);
             display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            overflow: hidden;
+        }}
+        .tv-process-panel {{
+            min-width: 0;
+            display: grid;
             grid-template-columns: clamp(70px, 7vw, 118px) minmax(0, 1fr);
             align-items: center;
             gap: clamp(0.85rem, 1.4vw, 1.7rem);
             padding: clamp(0.55rem, 0.9vw, 0.95rem) clamp(0.9rem, 1.35vw, 1.35rem);
+        }}
+        .tv-process-panel + .tv-process-panel {{
+            border-left: 1px solid rgba(26, 222, 240, 0.65);
         }}
         .tv-process-icon {{
             width: clamp(58px, 5.4vw, 92px);
@@ -512,7 +522,7 @@ def _render_tv_dashboard(
         }}
         .tv-process-value {{
             color: #ffffff;
-            font-size: clamp(2.7rem, 5vw, 6.35rem);
+            font-size: clamp(2.15rem, 3.65vw, 5.35rem);
             line-height: 0.96;
             font-weight: 950;
             letter-spacing: 0;
@@ -839,9 +849,14 @@ def _render_tv_dashboard(
             }}
             .tv-header,
             .tv-process-banner,
+            .tv-process-panel,
             .tv-main,
             .tv-footer {{
                 grid-template-columns: 1fr;
+            }}
+            .tv-process-panel + .tv-process-panel {{
+                border-left: 0;
+                border-top: 1px solid rgba(26, 222, 240, 0.65);
             }}
             .tv-sheet {{
                 justify-self: start;
@@ -877,7 +892,6 @@ def _render_tv_dashboard(
                     <div class="tv-title">{_html_text(display_name)}</div>
                     <div class="tv-meta">
                         <span>Número: {_html_text(numero_text)}</span>
-                        <span>Maquinário: {_html_text(maquinario_text)}</span>
                     </div>
                 </div>
                 <div class="tv-sheet">
@@ -886,10 +900,19 @@ def _render_tv_dashboard(
                 </div>
             </header>
             <section class="tv-process-banner">
-                <div class="tv-process-icon" aria-hidden="true"></div>
-                <div>
-                    <div class="tv-process-label">PROCESSO ATUAL</div>
-                    <div class="tv-process-value">{process_banner_text}</div>
+                <div class="tv-process-panel">
+                    <div class="tv-process-icon" aria-hidden="true"></div>
+                    <div>
+                        <div class="tv-process-label">MAQUINÁRIO ATUAL</div>
+                        <div class="tv-process-value">{machine_banner_text}</div>
+                    </div>
+                </div>
+                <div class="tv-process-panel">
+                    <div class="tv-process-icon" aria-hidden="true"></div>
+                    <div>
+                        <div class="tv-process-label">PROCESSO ATUAL</div>
+                        <div class="tv-process-value">{process_banner_text}</div>
+                    </div>
                 </div>
             </section>
             <main class="tv-main">
