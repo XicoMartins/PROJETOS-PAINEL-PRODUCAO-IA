@@ -203,10 +203,14 @@ def _find_best_image(
     ]
     best_score = -1
     best_path = None
+    target_tokens = {token for token in target_key.split("_") if token}
     for key, path in image_map.items():
-        if target_key not in key:
+        key_tokens = {token for token in key.split("_") if token}
+        target_in_key = target_key in key
+        tokens_in_key = bool(target_tokens) and target_tokens.issubset(key_tokens)
+        if not target_in_key and not tokens_in_key:
             continue
-        score = 10
+        score = 10 if target_in_key else 7 + len(target_tokens)
         for context_key in context_keys:
             if context_key in key:
                 score += 3
@@ -523,7 +527,7 @@ def _render_tv_dashboard(
         .tv-media-frame img {{
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
             display: block;
         }}
         .tv-media-label {{
