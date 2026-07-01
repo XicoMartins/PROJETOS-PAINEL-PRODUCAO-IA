@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import time
 from pathlib import Path
 
@@ -13,11 +14,659 @@ from panel_views.common import (
     build_time_estimate_html,
     load_image_as_data_uri,
     render_panel_card,
-    render_prod_hora_kpis,
 )
 from services.display_panel_service import compute_display_panel_summary
-from services.metrics import format_duration, format_float, format_int, format_percent
+from services.metrics import (
+    format_duration,
+    format_float,
+    format_int,
+    format_percent,
+    is_positive_finite,
+)
 from services.planilha_service import normalize_display_name
+
+
+def _html_text(value: object, fallback: str = "N/A") -> str:
+    if value is None:
+        return fallback
+    try:
+        if pd.isna(value):
+            return fallback
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip()
+    return html.escape(text if text else fallback)
+
+
+def _first_text(values: list[str] | None, fallback: str = "N/A") -> str:
+    if not values:
+        return fallback
+    return str(values[0]).strip() or fallback
+
+
+def _selected_or_unique_text(
+    selected: list[str] | None,
+    df: pd.DataFrame,
+    column: str,
+    fallback: str = "N/A",
+) -> str:
+    selected_text = _first_text(selected, "")
+    if selected_text:
+        return selected_text
+    if column not in df:
+        return fallback
+    values = [str(value).strip() for value in df[column].dropna().unique()]
+    values = [value for value in values if value]
+    if len(values) == 1:
+        return values[0]
+    return fallback
+
+
+def _format_tv_decimal(value: float | int | None, decimals: int = 2) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+    text = f"{float(value):,.{decimals}f}"
+    return text.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def _format_tv_percent(value: float | None, decimals: int = 1) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+    return f"{_format_tv_decimal(float(value) * 100, decimals)}%"
+
+
+def _format_tv_duration(hours: float | None) -> str:
+    if not is_positive_finite(hours):
+        return "N/A"
+    total_minutes = int(round(float(hours) * 60))
+    hour_value, minute_value = divmod(total_minutes, 60)
+    return f"{hour_value}h{minute_value:02d}"
+
+
+def _compute_prod_hora_summary(df: pd.DataFrame) -> dict[str, object] | None:
+    prod_cols = {"operador", "duracao_horas", "quantidade_produzida"}
+    if not prod_cols.issubset(df.columns):
+        return None
+
+    op_df = df.dropna(subset=["operador", "duracao_horas", "quantidade_produzida"]).copy()
+    if op_df.empty:
+        return None
+
+    op_df = op_df[op_df["duracao_horas"] > 0]
+    if op_df.empty:
+        return None
+
+    op_df["prod_hora_apont"] = pd.to_numeric(
+        op_df["quantidade_produzida"] / op_df["duracao_horas"],
+        errors="coerce",
+    )
+    op_df = op_df.dropna(subset=["prod_hora_apont"])
+    if op_df.empty:
+        return None
+
+    op_df = op_df.sort_values("prod_hora_apont", ascending=False).reset_index(drop=True)
+    top_row = op_df.iloc[0]
+    bottom_row = op_df.iloc[-1]
+    return {
+        "best_value": float(top_row["prod_hora_apont"]),
+        "best_operator": str(top_row["operador"]),
+        "avg_value": float(op_df["prod_hora_apont"].mean()),
+        "worst_value": float(bottom_row["prod_hora_apont"]),
+        "worst_operator": str(bottom_row["operador"]),
+    }
+
+
+def _build_tv_time_card(summary) -> str:
+    if summary.remaining is not None and summary.remaining <= 0:
+        values = [
+            ("Melhor cen&aacute;rio", "Concluido", "good"),
+            ("Cen&aacute;rio m&eacute;dio", "Concluido", "neutral"),
+            ("Pior cen&aacute;rio", "Concluido", "bad"),
+        ]
+    elif summary.time_estimate is not None:
+        values = [
+            (
+                "Melhor cen&aacute;rio",
+                _format_tv_duration(summary.time_estimate.best_hours),
+                "good",
+            ),
+            (
+                "Cen&aacute;rio m&eacute;dio",
+                _format_tv_duration(summary.time_estimate.avg_hours),
+                "neutral",
+            ),
+            (
+                "Pior cen&aacute;rio",
+                _format_tv_duration(summary.time_estimate.worst_hours),
+                "bad",
+            ),
+        ]
+    else:
+        values = [
+            ("Melhor cen&aacute;rio", "N/A", "good"),
+            ("Cen&aacute;rio m&eacute;dio", "N/A", "neutral"),
+            ("Pior cen&aacute;rio", "N/A", "bad"),
+        ]
+
+    items = "".join(
+        f"""
+        <div class="tv-time-item tv-time-{style}">
+            <div class="tv-time-label">{label}</div>
+            <div class="tv-time-value">{html.escape(value)}</div>
+        </div>
+        """
+        for label, value, style in values
+    )
+    return f"""
+    <div class="tv-card tv-time-card">
+        <div class="tv-card-title">TEMPO RESTANTE</div>
+        <div class="tv-time-grid">{items}</div>
+    </div>
+    """
+
+
+def _build_tv_prod_card(
+    title: str,
+    value: str,
+    subtitle: str,
+    variant: str,
+) -> str:
+    return f"""
+    <div class="tv-card tv-footer-card tv-footer-{variant}">
+        <div class="tv-footer-mark" aria-hidden="true"></div>
+        <div>
+            <div class="tv-footer-title">{title}</div>
+            <div class="tv-footer-value">{html.escape(value)}</div>
+            <div class="tv-footer-sub">{html.escape(subtitle)}</div>
+        </div>
+    </div>
+    """
+
+
+def _render_tv_dashboard(
+    *,
+    df: pd.DataFrame,
+    summary,
+    filter_context: FilterContext,
+    image_path: Path | None,
+) -> None:
+    display_name = _selected_or_unique_text(summary.display_selected, df, "display")
+    numero_text = _selected_or_unique_text(summary.numero_selected, df, "numero_display")
+    maquinario_text = _selected_or_unique_text(
+        filter_context.maquinario_selected,
+        df,
+        "maquinario",
+    )
+    processo_text = _selected_or_unique_text(
+        filter_context.processo_selected,
+        df,
+        "processo",
+    )
+    planilha_text = summary.planilha_name or "N/A"
+
+    target_total = summary.target_total
+    produced = summary.total_produzido
+    progress_ratio = produced / target_total if target_total and target_total > 0 else None
+    progress_width = 0 if progress_ratio is None else max(0, min(progress_ratio, 1)) * 100
+    percent_text = _format_tv_percent(progress_ratio)
+    total_text = format_int(target_total) if target_total is not None else "Sem meta"
+    produced_text = format_int(produced)
+    remaining_text = "Sem meta"
+    remaining_unit_html = ""
+    if summary.remaining is not None:
+        remaining_text = "Concluido" if summary.remaining <= 0 else format_int(summary.remaining)
+        if summary.remaining > 0:
+            remaining_unit_html = '<span class="tv-number-sub">pe&ccedil;as</span>'
+
+    image_uri = load_image_as_data_uri(image_path) if image_path else None
+    image_html = (
+        f'<img src="{image_uri}" alt="Imagem do display">'
+        if image_uri
+        else '<div class="tv-image-empty">Imagem do display nao encontrada</div>'
+    )
+
+    prod_summary = _compute_prod_hora_summary(df)
+    if prod_summary:
+        footer_cards = [
+            _build_tv_prod_card(
+                "Melhor prod/hora",
+                _format_tv_decimal(prod_summary["best_value"]),
+                str(prod_summary["best_operator"]),
+                "good",
+            ),
+            _build_tv_prod_card(
+                "M&eacute;dia prod/hora",
+                _format_tv_decimal(prod_summary["avg_value"]),
+                "Apontamentos",
+                "neutral",
+            ),
+            _build_tv_prod_card(
+                "Pior prod/hora",
+                _format_tv_decimal(prod_summary["worst_value"]),
+                str(prod_summary["worst_operator"]),
+                "bad",
+            ),
+        ]
+    else:
+        footer_cards = [
+            _build_tv_prod_card("Melhor prod/hora", "N/A", "Sem dados", "good"),
+            _build_tv_prod_card("M&eacute;dia prod/hora", "N/A", "Apontamentos", "neutral"),
+            _build_tv_prod_card("Pior prod/hora", "N/A", "Sem dados", "bad"),
+        ]
+
+    time_card_html = _build_tv_time_card(summary)
+    footer_html = "".join(footer_cards)
+
+    st.markdown(
+        f"""
+        <style>
+        section.main > div:first-child {{
+            padding: 0.65rem 1.25rem 0.75rem;
+        }}
+        .block-container {{
+            max-width: 100%;
+            padding: 0 !important;
+        }}
+        .stApp {{
+            background:
+                radial-gradient(circle at 22% 38%, rgba(11, 88, 97, 0.22), transparent 34%),
+                linear-gradient(135deg, #020914 0%, #061522 48%, #02070f 100%);
+            color: #f5f7f8;
+        }}
+        .stApp h1,
+        [data-testid="stHeader"] {{
+            display: none;
+        }}
+        .tv-dashboard {{
+            box-sizing: border-box;
+            height: calc(100vh - 24px);
+            min-height: 640px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+            gap: clamp(0.65rem, 1.1vh, 1rem);
+            overflow: hidden;
+            padding: clamp(0.75rem, 1.4vw, 1.45rem);
+            font-family: "Segoe UI", Arial, sans-serif;
+        }}
+        .tv-header {{
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(280px, 26vw);
+            gap: 1.5rem;
+            align-items: end;
+            padding-bottom: clamp(0.6rem, 1vh, 0.9rem);
+            border-bottom: 1px solid rgba(199, 225, 229, 0.17);
+        }}
+        .tv-kicker {{
+            color: rgba(245, 247, 248, 0.92);
+            font-size: clamp(1rem, 1.15vw, 1.45rem);
+            font-weight: 800;
+            margin-bottom: 0.18rem;
+        }}
+        .tv-title {{
+            color: #ffffff;
+            font-size: clamp(2.55rem, 4vw, 4.7rem);
+            line-height: 0.98;
+            font-weight: 900;
+            letter-spacing: 0;
+            text-transform: uppercase;
+            text-shadow: 0 4px 18px rgba(0, 0, 0, 0.36);
+        }}
+        .tv-meta {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem 0.8rem;
+            margin-top: 0.7rem;
+            color: rgba(245, 247, 248, 0.94);
+            font-size: clamp(0.95rem, 1.18vw, 1.52rem);
+            line-height: 1.2;
+            font-weight: 600;
+        }}
+        .tv-meta span + span::before {{
+            content: "|";
+            color: rgba(245, 247, 248, 0.55);
+            margin-right: 0.8rem;
+        }}
+        .tv-sheet {{
+            justify-self: end;
+            color: rgba(226, 235, 238, 0.66);
+            font-size: clamp(0.78rem, 0.95vw, 1.1rem);
+            line-height: 1.45;
+            text-align: left;
+            padding-bottom: 0.18rem;
+        }}
+        .tv-sheet strong {{
+            display: block;
+            color: rgba(226, 235, 238, 0.52);
+            font-size: 0.92em;
+            font-weight: 600;
+            margin-bottom: 0.22rem;
+        }}
+        .tv-main {{
+            min-height: 0;
+            display: grid;
+            grid-template-columns: minmax(360px, 41%) minmax(520px, 59%);
+            gap: clamp(1.1rem, 2.3vw, 2.4rem);
+            align-items: stretch;
+        }}
+        .tv-product {{
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.2rem 0 0.1rem;
+            overflow: hidden;
+        }}
+        .tv-product img {{
+            display: block;
+            max-width: 96%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            filter: drop-shadow(0 26px 38px rgba(0, 0, 0, 0.45));
+        }}
+        .tv-image-empty {{
+            color: rgba(245, 247, 248, 0.55);
+            font-size: 1.25rem;
+        }}
+        .tv-indicators {{
+            min-height: 0;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(130px, 0.34fr);
+            grid-template-rows: minmax(170px, 1.3fr) minmax(120px, 0.78fr) minmax(132px, 0.86fr);
+            gap: clamp(0.65rem, 1vw, 0.95rem);
+            align-content: center;
+        }}
+        .tv-card {{
+            min-width: 0;
+            border: 1px solid rgba(137, 212, 218, 0.32);
+            border-radius: 18px;
+            background:
+                radial-gradient(circle at 12% 12%, rgba(38, 128, 133, 0.2), transparent 38%),
+                linear-gradient(150deg, rgba(4, 46, 58, 0.94), rgba(3, 31, 43, 0.88));
+            box-shadow: inset 0 0 22px rgba(36, 194, 202, 0.04), 0 18px 42px rgba(0, 0, 0, 0.18);
+            padding: clamp(1rem, 1.35vw, 1.55rem);
+        }}
+        .tv-card-title {{
+            color: rgba(245, 247, 248, 0.9);
+            font-size: clamp(0.86rem, 1vw, 1.22rem);
+            font-weight: 700;
+            line-height: 1.1;
+            text-transform: uppercase;
+            margin-bottom: 0.55rem;
+        }}
+        .tv-production-card {{
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }}
+        .tv-production-line {{
+            display: flex;
+            align-items: baseline;
+            gap: clamp(0.7rem, 1.3vw, 1.4rem);
+            margin-top: 0.1rem;
+        }}
+        .tv-production-value {{
+            color: #f8fbfd;
+            font-size: clamp(4rem, 6.2vw, 8rem);
+            line-height: 0.9;
+            font-weight: 900;
+            text-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+        }}
+        .tv-production-total {{
+            color: rgba(245, 247, 248, 0.86);
+            font-size: clamp(1.35rem, 1.75vw, 2.25rem);
+            font-weight: 700;
+        }}
+        .tv-progress-text {{
+            margin-top: 0.65rem;
+            color: #26df72;
+            font-size: clamp(1.2rem, 1.7vw, 2.1rem);
+            font-weight: 800;
+        }}
+        .tv-progress-track {{
+            height: clamp(15px, 1.5vw, 24px);
+            border-radius: 999px;
+            background: rgba(49, 113, 134, 0.42);
+            overflow: hidden;
+            margin-top: 0.4rem;
+        }}
+        .tv-progress-fill {{
+            width: {progress_width:.3f}%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #25db72, #21c966);
+            box-shadow: 0 0 24px rgba(37, 219, 114, 0.28);
+        }}
+        .tv-number-card {{
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }}
+        .tv-number-value {{
+            color: #f8fbfd;
+            font-size: clamp(3.1rem, 4.2vw, 5.75rem);
+            line-height: 0.9;
+            font-weight: 900;
+            margin-top: 0.28rem;
+        }}
+        .tv-number-sub {{
+            color: rgba(245, 247, 248, 0.86);
+            font-size: clamp(1rem, 1.35vw, 1.7rem);
+            font-weight: 600;
+            margin-left: 0.25rem;
+        }}
+        .tv-time-card {{
+            grid-column: 1 / 3;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }}
+        .tv-time-grid {{
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0;
+            align-items: center;
+        }}
+        .tv-time-item {{
+            min-width: 0;
+            padding: 0 1rem;
+            border-left: 1px solid rgba(245, 247, 248, 0.3);
+        }}
+        .tv-time-item:first-child {{
+            padding-left: 0;
+            border-left: 0;
+        }}
+        .tv-time-label {{
+            font-size: clamp(0.88rem, 1vw, 1.24rem);
+            line-height: 1.1;
+            font-weight: 600;
+            color: rgba(245, 247, 248, 0.82);
+        }}
+        .tv-time-value {{
+            font-size: clamp(2.35rem, 3.3vw, 4.55rem);
+            line-height: 0.98;
+            font-weight: 900;
+            margin-top: 0.25rem;
+        }}
+        .tv-time-good .tv-time-label,
+        .tv-time-good .tv-time-value,
+        .tv-footer-good .tv-footer-value,
+        .tv-footer-good .tv-footer-sub {{
+            color: #29df74;
+        }}
+        .tv-time-bad .tv-time-label,
+        .tv-time-bad .tv-time-value,
+        .tv-footer-bad .tv-footer-value,
+        .tv-footer-bad .tv-footer-sub {{
+            color: #ff483f;
+        }}
+        .tv-register-card {{
+            grid-column: 3 / 4;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }}
+        .tv-register-card .tv-number-value {{
+            font-size: clamp(2.8rem, 3.6vw, 4.85rem);
+        }}
+        .tv-footer {{
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: clamp(0.8rem, 1.5vw, 1.45rem);
+        }}
+        .tv-footer-card {{
+            display: grid;
+            grid-template-columns: clamp(58px, 5.1vw, 94px) minmax(0, 1fr);
+            align-items: center;
+            gap: clamp(0.75rem, 1.35vw, 1.45rem);
+            min-height: clamp(96px, 11vh, 142px);
+            padding: clamp(0.82rem, 1.1vw, 1.25rem);
+            border-radius: 14px;
+        }}
+        .tv-footer-mark {{
+            width: clamp(58px, 5.1vw, 94px);
+            aspect-ratio: 1;
+            border-radius: 50%;
+            border: 1px solid currentColor;
+            opacity: 0.95;
+            position: relative;
+        }}
+        .tv-footer-good .tv-footer-mark {{
+            color: #29df74;
+        }}
+        .tv-footer-neutral .tv-footer-mark {{
+            color: rgba(245, 247, 248, 0.74);
+        }}
+        .tv-footer-bad .tv-footer-mark {{
+            color: #ff483f;
+        }}
+        .tv-footer-mark::before {{
+            content: "";
+            position: absolute;
+            inset: 31%;
+            border: 4px solid currentColor;
+            border-left: 0;
+            border-bottom: 0;
+            transform: rotate(-45deg);
+        }}
+        .tv-footer-bad .tv-footer-mark::before {{
+            transform: rotate(135deg);
+        }}
+        .tv-footer-neutral .tv-footer-mark::before {{
+            inset: 25%;
+            border-radius: 50%;
+            border: 3px solid currentColor;
+            transform: none;
+        }}
+        .tv-footer-title {{
+            color: rgba(245, 247, 248, 0.86);
+            font-size: clamp(0.95rem, 1.15vw, 1.42rem);
+            line-height: 1.08;
+            font-weight: 600;
+        }}
+        .tv-footer-value {{
+            color: #f8fbfd;
+            font-size: clamp(2.45rem, 3.55vw, 5rem);
+            line-height: 0.95;
+            font-weight: 900;
+            margin-top: 0.18rem;
+        }}
+        .tv-footer-sub {{
+            color: rgba(245, 247, 248, 0.78);
+            font-size: clamp(0.8rem, 1vw, 1.25rem);
+            line-height: 1.05;
+            font-weight: 800;
+            text-transform: uppercase;
+            overflow-wrap: anywhere;
+            margin-top: 0.2rem;
+        }}
+        @media (max-width: 1100px) {{
+            .tv-dashboard {{
+                height: auto;
+                min-height: 100vh;
+                overflow: visible;
+            }}
+            .tv-header,
+            .tv-main,
+            .tv-footer {{
+                grid-template-columns: 1fr;
+            }}
+            .tv-sheet {{
+                justify-self: start;
+            }}
+            .tv-indicators {{
+                grid-template-columns: 1fr;
+                grid-template-rows: none;
+            }}
+            .tv-production-card,
+            .tv-time-card,
+            .tv-register-card {{
+                grid-column: auto;
+            }}
+            .tv-product {{
+                min-height: 46vh;
+            }}
+        }}
+        </style>
+        <div class="tv-dashboard">
+            <header class="tv-header">
+                <div>
+                    <div class="tv-kicker">Painel TV</div>
+                    <div class="tv-title">{_html_text(display_name)}</div>
+                    <div class="tv-meta">
+                        <span>N&uacute;mero: {_html_text(numero_text)}</span>
+                        <span>Maquin&aacute;rio: {_html_text(maquinario_text)}</span>
+                        <span>Processo: {_html_text(processo_text)}</span>
+                    </div>
+                </div>
+                <div class="tv-sheet">
+                    <strong>Planilha vinculada:</strong>
+                    {_html_text(planilha_text)}
+                </div>
+            </header>
+            <main class="tv-main">
+                <section class="tv-product">
+                    {image_html}
+                </section>
+                <section class="tv-indicators">
+                    <div class="tv-card tv-production-card">
+                        <div class="tv-card-title">PRODU&Ccedil;&Atilde;O</div>
+                        <div class="tv-production-line">
+                            <div class="tv-production-value">{html.escape(produced_text)}</div>
+                            <div class="tv-production-total">de {html.escape(total_text)}</div>
+                        </div>
+                        <div class="tv-progress-text">{html.escape(percent_text)} conclu&iacute;do</div>
+                        <div class="tv-progress-track">
+                            <div class="tv-progress-fill"></div>
+                        </div>
+                    </div>
+                    <div class="tv-card tv-number-card">
+                        <div class="tv-card-title">A PRODUZIR</div>
+                        <div>
+                            <span class="tv-number-value">{html.escape(remaining_text)}</span>
+                            {remaining_unit_html}
+                        </div>
+                    </div>
+                    <div class="tv-card tv-number-card">
+                        <div class="tv-card-title">DISPLAYS</div>
+                        <div class="tv-number-value">{_html_text(summary.lote_text)}</div>
+                    </div>
+                    {time_card_html}
+                    <div class="tv-card tv-register-card">
+                        <div class="tv-card-title">REGISTROS</div>
+                        <div class="tv-number-value">{html.escape(format_int(summary.registros))}</div>
+                    </div>
+                </section>
+            </main>
+            <footer class="tv-footer">
+                {footer_html}
+            </footer>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_display_panel(
@@ -165,6 +814,22 @@ def render_display_panel(
     if summary.planilha_warning:
         st.warning(summary.planilha_warning)
 
+    images_dir = Path(__file__).resolve().parent.parent / "FOTOS DISPLAY"
+    image_map = build_display_image_map(images_dir)
+    image_path = None
+    if display_selected:
+        key = normalize_display_name(display_selected[0])
+        image_path = image_map.get(key)
+
+    if layout == "tv":
+        _render_tv_dashboard(
+            df=df,
+            summary=summary,
+            filter_context=filter_context,
+            image_path=image_path,
+        )
+        return
+
     total_lote_text = (
         format_int(summary.target_total)
         if summary.target_total is not None
@@ -200,11 +865,7 @@ def render_display_panel(
 
     col_img, col_info = st.columns([3, 2])
     with col_img:
-        images_dir = Path(__file__).resolve().parent.parent / "FOTOS DISPLAY"
-        image_map = build_display_image_map(images_dir)
         if display_selected:
-            key = normalize_display_name(display_selected[0])
-            image_path = image_map.get(key)
             if image_path:
                 if layout == "tv":
                     st.image(str(image_path), width="stretch")
@@ -486,7 +1147,6 @@ def render_tv_panel(df: pd.DataFrame, filter_context: FilterContext) -> None:
         numero_selected_override=numero_override,
         layout="tv",
     )
-    render_prod_hora_kpis(df_cycle, show_info=False)
 
     if auto_rotate and len(combos) > 1:
         st.session_state["tv_index"] = (index + 1) % len(combos)
