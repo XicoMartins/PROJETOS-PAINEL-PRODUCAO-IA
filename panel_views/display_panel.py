@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import textwrap
 import time
 from pathlib import Path
 
@@ -258,7 +259,8 @@ def _render_tv_dashboard(
     footer_html = "".join(footer_cards)
 
     st.markdown(
-        f"""
+        textwrap.dedent(
+            f"""
         <style>
         section.main > div:first-child {{
             padding: 0.65rem 1.25rem 0.75rem;
@@ -665,6 +667,7 @@ def _render_tv_dashboard(
             </footer>
         </div>
         """,
+        ).strip(),
         unsafe_allow_html=True,
     )
 
@@ -1087,18 +1090,6 @@ def render_tv_panel(df: pd.DataFrame, filter_context: FilterContext) -> None:
     numero_val = combo[combo_cols.index("numero_display")] if "numero_display" in combo_cols else None
     maquinario = combo[combo_cols.index("maquinario")] if "maquinario" in combo_cols else None
     processo = combo[combo_cols.index("processo")] if "processo" in combo_cols else None
-
-    heading_parts = []
-    if display_val is not None:
-        heading_parts.append(f"Display: {display_val}")
-    if numero_val is not None:
-        heading_parts.append(f"Numero: {numero_val}")
-    if maquinario is not None:
-        heading_parts.append(f"Maquinario: {maquinario}")
-    if processo is not None:
-        heading_parts.append(f"Processo: {processo}")
-    if heading_parts:
-        st.markdown("### " + " | ".join(heading_parts))
 
     df_cycle = df
     if display_val is not None and "display" in df_cycle:
