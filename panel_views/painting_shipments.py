@@ -200,11 +200,14 @@ def _render_panel(frame: pd.DataFrame) -> None:
                 card_class="painting-card-accent",
             ),
             build_panel_card_html("TOTAL ENVIADO", format_int(summary.total_enviado)),
-            build_panel_card_html("TOTAL RETORNO", format_int(summary.total_retorno)),
+            build_panel_card_html(
+                "TOTAL RETORNO",
+                format_int(summary.total_retorno),
+                card_class="painting-card-good",
+            ),
             build_panel_card_html(
                 "PENDENTE ENVIAR",
                 pending_text(summary.pendente_enviar),
-                card_class="painting-card-good",
             ),
             build_panel_card_html(
                 "PENDENTE RETORNAR",
