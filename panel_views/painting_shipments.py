@@ -122,6 +122,7 @@ def _render_styles() -> None:
             box-shadow: inset 3px 0 0 #24dfff;
         }
         .painting-card-stack .painting-card-good .panel-value { color: #36df8b; }
+        .painting-card-stack .painting-card-records { flex: .72 1 0; }
         div[data-testid="stTabs"] button[role="tab"] {
             min-height: 44px;
             font-size: .95rem;
@@ -158,7 +159,7 @@ def _render_panel(frame: pd.DataFrame) -> None:
     if summary.warning:
         st.warning(summary.warning)
 
-    context_parts = [part for part in (summary.display, summary.processo) if part]
+    context_parts = [part for part in (summary.display,) if part]
     if summary.planilha_name:
         context_parts.append(f"Planilha vinculada: {summary.planilha_name}")
     st.markdown(
@@ -166,15 +167,10 @@ def _render_panel(frame: pd.DataFrame) -> None:
         unsafe_allow_html=True,
     )
 
-    total_text = format_int(summary.total_esperado) if summary.total_esperado is not None else "Sem meta"
-    remaining_text = format_int(summary.a_produzir) if summary.a_produzir is not None else "Sem meta"
-    if summary.a_produzir is not None and summary.a_produzir <= 0:
-        remaining_text = "Concluido"
-    qnt_sub = (
-        f"QNT planilha: {format_int(summary.qnt_planilha)}"
-        if summary.qnt_planilha is not None
-        else None
-    )
+    def pending_text(value: float | None) -> str:
+        if value is None:
+            return "Sem meta"
+        return "Concluido" if value <= 0 else format_int(value)
 
     col_image, col_info = st.columns([3, 2])
     with col_image:
@@ -195,12 +191,30 @@ def _render_panel(frame: pd.DataFrame) -> None:
 
     with col_info:
         cards = [
-            build_panel_card_html("COR / PROCESSO", summary.cor or "N/A", summary.processo),
-            build_panel_card_html("CODIGO PINTURA", summary.codigo_pintura or "N/A", f"Lote: {summary.lote_text}"),
-            build_panel_card_html("TOTAL ESPERADO", total_text, qnt_sub, card_class="painting-card-accent"),
-            build_panel_card_html("TOTAL APONTADO", format_int(summary.total_apontado)),
-            build_panel_card_html("A PRODUZIR", remaining_text, card_class="painting-card-good"),
-            build_panel_card_html("REGISTROS", format_int(summary.registros)),
+            build_panel_card_html("COR", summary.cor or "N/A"),
+            build_panel_card_html(
+                "LOTE",
+                summary.lote_text,
+                f"Codigo pintura: {summary.codigo_pintura or 'N/A'}",
+                card_class="painting-card-accent",
+            ),
+            build_panel_card_html("TOTAL ENVIADO", format_int(summary.total_enviado)),
+            build_panel_card_html("TOTAL RETORNO", format_int(summary.total_retorno)),
+            build_panel_card_html(
+                "PENDENTE ENVIAR",
+                pending_text(summary.pendente_enviar),
+                card_class="painting-card-good",
+            ),
+            build_panel_card_html(
+                "PENDENTE RETORNAR",
+                pending_text(summary.pendente_retornar),
+                card_class="painting-card-good",
+            ),
+            build_panel_card_html(
+                "REGISTROS",
+                format_int(summary.registros),
+                card_class="painting-card-records",
+            ),
         ]
         st.markdown(
             f'<div class="painting-card-stack">{"".join(cards)}</div>',

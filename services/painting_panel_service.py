@@ -17,10 +17,10 @@ class PaintingPanelSummary:
     cor: str | None
     codigo_pintura: str | None
     lote_text: str
-    total_esperado: float | None
-    total_apontado: float
-    a_produzir: float | None
-    qnt_planilha: float | None
+    total_enviado: float
+    total_retorno: float
+    pendente_enviar: float | None
+    pendente_retornar: float | None
     registros: int
     planilha_name: str | None
     warning: str | None
@@ -59,6 +59,16 @@ def _clean_optional_text(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _painting_direction(processo: object) -> str | None:
+    key = normalize_display_name(processo or "")
+    tokens = set(key.split("_"))
+    if "envio" in tokens:
+        return "envio"
+    if "retorno" in tokens:
+        return "retorno"
+    return None
 
 
 @st.cache_data(show_spinner=False)
@@ -122,32 +132,14 @@ def load_painting_plans(planilhas_dir: Path) -> tuple[pd.DataFrame, list[str]]:
     return pd.concat(frames, ignore_index=True), names
 
 
-def _matching_plan_rows(plan: pd.DataFrame, display: str, processo: str) -> pd.DataFrame:
-    display_key = normalize_display_name(display)
-    processo_key = normalize_display_name(processo)
-    color_key = normalize_display_name(extract_painting_color(processo) or "")
-    display_rows = plan[plan["display_key"] == display_key]
-    exact = display_rows[display_rows["processo_key"] == processo_key]
-    if not exact.empty:
-        return exact
-    if color_key:
-        return display_rows[display_rows["cor_key"] == color_key]
-    return exact
-
-
 def compute_painting_panel_summary(
     frame: pd.DataFrame,
     *,
     planilhas_dir: Path,
 ) -> PaintingPanelSummary:
-    total_apontado = float(
-        pd.to_numeric(frame.get("quantidade", pd.Series(dtype=float)), errors="coerce")
-        .fillna(0)
-        .sum()
-    )
     if frame.empty:
         return PaintingPanelSummary(
-            None, None, None, None, "N/A", None, total_apontado, None,
+            None, None, None, None, "N/A", 0, 0, None,
             None, 0, None, None,
         )
 
@@ -161,7 +153,7 @@ def compute_painting_panel_summary(
     if plan.empty:
         warning = "Planilha de pintura nao encontrada ou sem linhas validas."
         return PaintingPanelSummary(
-            display, processo, cor, codigo, "N/A", None, total_apontado, None,
+            display, processo, cor, codigo, "N/A", 0, 0, None,
             None, len(frame), None, warning,
         )
 
@@ -169,44 +161,69 @@ def compute_painting_panel_summary(
     for column in ("display", "processo", "codigo_pintura"):
         work[column] = work.get(column, pd.Series(index=work.index, dtype="string")).astype("string").str.strip()
     work["quantidade_num"] = pd.to_numeric(work.get("quantidade"), errors="coerce").fillna(0)
+    work["display_key"] = work["display"].apply(normalize_display_name)
+    work["cor_key"] = work["processo"].apply(
+        lambda value: normalize_display_name(extract_painting_color(value) or "")
+    )
+    work["codigo_key"] = work["codigo_pintura"].apply(normalize_display_name)
+    work["direcao"] = work["processo"].apply(_painting_direction)
 
-    expected_total = 0.0
-    qnt_total = 0.0
-    matched_names: set[str] = set()
-    unmatched = 0
-    lotes: list[str] = []
-    group_columns = ["display", "processo", "codigo_pintura"]
-    for (group_display, group_process, group_code), _group in work.groupby(
-        group_columns, dropna=False, sort=False
-    ):
-        multiplier = extract_painting_multiplier(group_code)
-        matches = _matching_plan_rows(plan, str(group_display), str(group_process))
-        if multiplier is None or matches.empty:
-            unmatched += 1
-            continue
-        qnt = float(pd.to_numeric(matches["qnt_por_produto"], errors="coerce").fillna(0).sum())
-        expected_total += float(math.floor((multiplier * qnt) + 0.5))
-        qnt_total += qnt
-        lotes.append(f"{multiplier:04d}")
-        matched_names.update(matches["planilha_name"].dropna().astype(str))
+    display_key = normalize_display_name(display or "")
+    color_key = normalize_display_name(cor or "")
+    code_key = normalize_display_name(codigo or "")
+    focus_rows = work[
+        (work["display_key"] == display_key)
+        & (work["cor_key"] == color_key)
+        & (work["codigo_key"] == code_key)
+    ]
+    total_enviado = float(
+        focus_rows.loc[focus_rows["direcao"] == "envio", "quantidade_num"].sum()
+    )
+    total_retorno = float(
+        focus_rows.loc[focus_rows["direcao"] == "retorno", "quantidade_num"].sum()
+    )
 
-    total_esperado = expected_total if matched_names else None
-    remaining = max(total_esperado - total_apontado, 0.0) if total_esperado is not None else None
-    warning = None
-    if unmatched:
-        warning = f"{unmatched} combinacao(oes) sem codigo ou processo correspondente na planilha."
+    plan_focus = plan[
+        (plan["display_key"] == display_key) & (plan["cor_key"] == color_key)
+    ].copy()
+    plan_focus["direcao"] = plan_focus["processo_nome"].apply(_painting_direction)
+    multiplier = extract_painting_multiplier(codigo)
+
+    def expected_for(direction: str) -> float | None:
+        if multiplier is None:
+            return None
+        rows = plan_focus[plan_focus["direcao"] == direction]
+        if rows.empty:
+            return None
+        qnt = pd.to_numeric(rows["qnt_por_produto"], errors="coerce").fillna(0).sum()
+        return float(math.floor((float(qnt) * multiplier) + 0.5))
+
+    expected_envio = expected_for("envio")
+    expected_retorno = expected_for("retorno")
+    pendente_enviar = (
+        max(expected_envio - total_enviado, 0.0) if expected_envio is not None else None
+    )
+    pendente_retornar = (
+        max(expected_retorno - total_retorno, 0.0) if expected_retorno is not None else None
+    )
+    matched_names = set(plan_focus["planilha_name"].dropna().astype(str))
     planilha_name = ", ".join(sorted(matched_names)) or None
-    lote_text = ", ".join(dict.fromkeys(lotes)) or "N/A"
+    lote_text = f"{multiplier:04d}" if multiplier is not None else "N/A"
+    warning = None
+    if multiplier is None:
+        warning = "Codigo de pintura sem os quatro digitos do lote."
+    elif plan_focus.empty:
+        warning = "Cor ou display sem processo correspondente na planilha de pintura."
     return PaintingPanelSummary(
         display=display,
         processo=processo,
         cor=cor,
         codigo_pintura=codigo,
         lote_text=lote_text,
-        total_esperado=total_esperado,
-        total_apontado=total_apontado,
-        a_produzir=remaining,
-        qnt_planilha=qnt_total if matched_names else None,
+        total_enviado=total_enviado,
+        total_retorno=total_retorno,
+        pendente_enviar=pendente_enviar,
+        pendente_retornar=pendente_retornar,
         registros=len(frame),
         planilha_name=planilha_name,
         warning=warning,

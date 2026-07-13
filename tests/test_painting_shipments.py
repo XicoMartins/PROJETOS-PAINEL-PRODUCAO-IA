@@ -89,13 +89,17 @@ class PaintingShipmentsTests(unittest.TestCase):
 
         self.assertEqual(filtered.index.tolist(), [1])
 
-    def test_expected_quantity_uses_code_multiplier_times_plan_qnt(self) -> None:
+    def test_expected_quantity_is_split_between_send_and_return(self) -> None:
         frame = pd.DataFrame(
             {
-                "display": ["DISPLAY ARAMADO G", "DISPLAY ARAMADO G"],
-                "processo": ["ENVIO - VERMELHO", "ENVIO - VERMELHO"],
-                "codigo_pintura": ["26010476", "26010476"],
-                "quantidade": [100, 50],
+                "display": ["DISPLAY ARAMADO G"] * 3,
+                "processo": [
+                    "ENVIO - VERMELHO",
+                    "ENVIO - VERMELHO",
+                    "RETORNO - VERMELHO",
+                ],
+                "codigo_pintura": ["26010476"] * 3,
+                "quantidade": [100, 50, 90],
             }
         )
         plans_dir = ROOT / "planilhas_pintura"
@@ -103,10 +107,16 @@ class PaintingShipmentsTests(unittest.TestCase):
         summary = compute_painting_panel_summary(frame, planilhas_dir=plans_dir)
 
         self.assertEqual(summary.lote_text, "0476")
-        self.assertAlmostEqual(summary.qnt_planilha, 1.0)
-        self.assertAlmostEqual(summary.total_esperado, 476.0)
-        self.assertAlmostEqual(summary.total_apontado, 150.0)
-        self.assertAlmostEqual(summary.a_produzir, 326.0)
+        self.assertAlmostEqual(summary.total_enviado, 150.0)
+        self.assertAlmostEqual(summary.total_retorno, 90.0)
+        self.assertAlmostEqual(summary.pendente_enviar, 326.0)
+        self.assertAlmostEqual(summary.pendente_retornar, 386.0)
+
+        send_only = compute_painting_panel_summary(
+            frame.iloc[:2], planilhas_dir=plans_dir
+        )
+        self.assertAlmostEqual(send_only.total_retorno, 0.0)
+        self.assertAlmostEqual(send_only.pendente_retornar, 476.0)
 
     def test_image_match_uses_color_for_send_and_return(self) -> None:
         images_dir = ROOT / "FOTOS PINTURA"

@@ -289,7 +289,6 @@ def main() -> None:
         _render_section_title("Painel de Produção")
         render_production_dashboard(filtered)
     elif selected_tab == "Remessas pintura":
-        _render_section_title("Remessas pintura")
         render_painting_shipments(filtered)
 
 
