@@ -177,6 +177,112 @@ def _read_postgres_source() -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
+def _read_painting_postgres_source() -> pd.DataFrame:
+    """Le os lancamentos de pintura usando a mesma conexao do painel."""
+    if psycopg is None:
+        raise RuntimeError("Dependencia psycopg nao instalada.")
+
+    database_url = get_database_url()
+    if not database_url:
+        raise RuntimeError("DATABASE_URL nao configurada nos Secrets.")
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql://" + database_url[len("postgres://"):]
+    if "sslmode=" not in database_url:
+        separator = "&" if "?" in database_url else "?"
+        database_url = f"{database_url}{separator}sslmode=require"
+
+    query = """
+        SELECT
+            id,
+            timestamp,
+            cliente,
+            display,
+            numero_display,
+            codigo_pintura,
+            maquinario,
+            processo,
+            data_producao,
+            hora_lancamento,
+            quantidade,
+            quantidade_total,
+            created_at
+        FROM painting_entries
+        ORDER BY timestamp DESC NULLS LAST, id DESC
+    """
+    with psycopg.connect(database_url) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            columns = [desc.name for desc in cursor.description]
+    return pd.DataFrame(rows, columns=columns)
+
+
+PAINTING_COLUMNS = [
+    "id", "timestamp", "cliente", "display", "numero_display",
+    "codigo_pintura", "maquinario", "processo", "data_producao",
+    "hora_lancamento", "quantidade", "quantidade_total", "created_at",
+]
+
+
+def _normalize_painting_frame(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Normaliza pintura sem aplicar regras exclusivas da producao."""
+    quality: dict[str, list | dict] = {"warnings": [], "fixes": [], "nulls": {}}
+    if df_raw.empty:
+        return pd.DataFrame(columns=PAINTING_COLUMNS), quality
+
+    frame = df_raw.copy()
+    frame.columns = [_normalize_col(col) for col in frame.columns]
+    for column in PAINTING_COLUMNS:
+        if column not in frame.columns:
+            frame[column] = pd.NA
+    frame = frame[PAINTING_COLUMNS]
+
+    raw_dates = frame["data_producao"].astype("string").str.strip()
+    parsed_dates = pd.to_datetime(raw_dates, format="%d/%m/%y", errors="coerce")
+    missing_dates = parsed_dates.isna()
+    if missing_dates.any():
+        parsed_dates.loc[missing_dates] = pd.to_datetime(
+            raw_dates.loc[missing_dates], format="%d/%m/%Y", errors="coerce"
+        )
+    still_missing = parsed_dates.isna()
+    if still_missing.any():
+        parsed_dates.loc[still_missing] = pd.to_datetime(
+            raw_dates.loc[still_missing], errors="coerce"
+        )
+    frame["data_producao"] = parsed_dates.dt.date.astype("object")
+    frame.loc[parsed_dates.isna(), "data_producao"] = None
+
+    for column in ("timestamp", "created_at"):
+        frame[column] = pd.to_datetime(frame[column], errors="coerce")
+    for column in ("quantidade", "quantidade_total"):
+        frame[column] = pd.to_numeric(frame[column], errors="coerce").fillna(0).clip(lower=0)
+
+    frame["numero_display"] = _normalize_integer_text(frame["numero_display"])
+    for column in (
+        "cliente", "display", "numero_display", "codigo_pintura",
+        "maquinario", "processo", "hora_lancamento",
+    ):
+        cleaned = frame[column].astype("string").str.strip()
+        invalid = cleaned.str.lower().isin(["", "none", "nan", "<na>"])
+        frame[column] = cleaned.mask(invalid, pd.NA)
+
+    quality["nulls"] = {
+        column: int(frame[column].isna().sum()) for column in PAINTING_COLUMNS
+    }
+    return frame, quality
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def load_painting_data() -> tuple[pd.DataFrame, Path | None, dict]:
+    """Carrega painting_entries diretamente do PostgreSQL com cache de 60s."""
+    try:
+        df_raw = _read_painting_postgres_source()
+    except Exception as exc:
+        return _empty_result(f"Falha ao ler PostgreSQL: {exc}")
+    frame, quality = _normalize_painting_frame(df_raw)
+    return frame, Path("painting_entries"), quality
+
+
 def _normalize_loaded_frame(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     if df_raw.empty:
         return df_raw, {"warnings": [], "fixes": [], "nulls": {}}

@@ -8,19 +8,21 @@ import secrets as secrets_lib
 import streamlit as st
 
 from branding import apply_branding
-from data_loader import load_data
+from data_loader import load_data, load_painting_data
 from filters import FilterContext, apply_filters
+from painting_filters import apply_painting_filters
 from panel_views import (
     render_charts,
     render_data_quality,
     render_display_panel,
     render_filtered_table,
     render_kpis,
+    render_painting_shipments,
     render_production_dashboard,
     render_tv_panel,
 )
 
-APP_VERSION = "13.1.0"
+APP_VERSION = "13.2.0"
 AUTH_SESSION_KEY = "auth_authenticated"
 AUTH_USER_KEY = "auth_user"
 
@@ -193,6 +195,7 @@ def main() -> None:
         "Registros",
         "Integridade",
         "Painel TV",
+        "Remessas pintura",
         "Painel de Produção",
     ]
     if st.session_state.get("dashboard_sidebar_tab") not in [None, *nav_tabs]:
@@ -223,7 +226,10 @@ def main() -> None:
             selected_label = list(data_sources.keys())[0]
     selected_source = data_sources[selected_label]
 
-    df, latest, quality = load_data(selected_source)
+    if selected_tab == "Remessas pintura":
+        df, latest, quality = load_painting_data()
+    else:
+        df, latest, quality = load_data(selected_source)
     if latest is None:
         source_warning = quality.get("warnings", [])
         if source_warning:
@@ -242,6 +248,7 @@ def main() -> None:
         "Painel Display",
         "Gráficos",
         "Registros",
+        "Remessas pintura",
         "Painel TV",
         "Painel de Produção",
     }
@@ -250,7 +257,11 @@ def main() -> None:
             st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
             st.caption(f"Fonte em uso: {latest.name}")
         period_mode = "month" if selected_tab == "Painel de Produção" else "date"
-        filtered, filter_context = apply_filters(df, period_mode=period_mode)
+        if selected_tab == "Remessas pintura":
+            filtered = apply_painting_filters(df)
+            filter_context = _build_unfiltered_context(filtered)
+        else:
+            filtered, filter_context = apply_filters(df, period_mode=period_mode)
     else:
         filtered = df
         filter_context = _build_unfiltered_context(df)
@@ -277,6 +288,9 @@ def main() -> None:
     elif selected_tab == "Painel de Produção":
         _render_section_title("Painel de Produção")
         render_production_dashboard(filtered)
+    elif selected_tab == "Remessas pintura":
+        _render_section_title("Remessas pintura")
+        render_painting_shipments(filtered)
 
 
 if __name__ == "__main__":
