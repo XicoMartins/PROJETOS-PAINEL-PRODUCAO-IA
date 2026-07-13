@@ -122,6 +122,7 @@ def _render_styles() -> None:
             box-shadow: inset 3px 0 0 #24dfff;
         }
         .painting-card-stack .painting-card-good .panel-value { color: #36df8b; }
+        .painting-card-stack .painting-card-bad .panel-value { color: #ff5b64; }
         .painting-card-stack .painting-card-records { flex: .72 1 0; }
         div[data-testid="stTabs"] button[role="tab"] {
             min-height: 44px;
@@ -208,7 +209,7 @@ def _render_panel(frame: pd.DataFrame) -> None:
             build_panel_card_html(
                 "PENDENTE RETORNAR",
                 pending_text(summary.pendente_retornar),
-                card_class="painting-card-good",
+                card_class="painting-card-bad",
             ),
             build_panel_card_html(
                 "REGISTROS",
