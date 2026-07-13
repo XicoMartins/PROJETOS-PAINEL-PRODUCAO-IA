@@ -13,9 +13,24 @@ if str(ROOT) not in sys.path:
 
 from data_loader import PAINTING_COLUMNS, _normalize_painting_frame
 from painting_filters import filter_painting_frame
+from services.painting_panel_service import (
+    compute_painting_panel_summary,
+    extract_painting_color,
+    extract_painting_multiplier,
+    find_painting_image,
+)
 
 
 class PaintingShipmentsTests(unittest.TestCase):
+    def test_painting_code_uses_last_four_digits(self) -> None:
+        self.assertEqual(extract_painting_multiplier("26010476"), 476)
+        self.assertEqual(extract_painting_multiplier("PINT-0054"), 54)
+        self.assertIsNone(extract_painting_multiplier("sem codigo"))
+
+    def test_color_ignores_shipping_direction(self) -> None:
+        self.assertEqual(extract_painting_color("ENVIO - VERMELHO"), "VERMELHO")
+        self.assertEqual(extract_painting_color("RETORNO - VERMELHO"), "VERMELHO")
+
     def test_empty_frame_keeps_expected_columns(self) -> None:
         frame, quality = _normalize_painting_frame(pd.DataFrame())
 
@@ -73,6 +88,39 @@ class PaintingShipmentsTests(unittest.TestCase):
         )
 
         self.assertEqual(filtered.index.tolist(), [1])
+
+    def test_expected_quantity_uses_code_multiplier_times_plan_qnt(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "display": ["DISPLAY ARAMADO G", "DISPLAY ARAMADO G"],
+                "processo": ["ENVIO - VERMELHO", "ENVIO - VERMELHO"],
+                "codigo_pintura": ["26010476", "26010476"],
+                "quantidade": [100, 50],
+            }
+        )
+        plans_dir = ROOT / "planilhas_pintura"
+
+        summary = compute_painting_panel_summary(frame, planilhas_dir=plans_dir)
+
+        self.assertEqual(summary.lote_text, "0476")
+        self.assertAlmostEqual(summary.qnt_planilha, 1.0)
+        self.assertAlmostEqual(summary.total_esperado, 476.0)
+        self.assertAlmostEqual(summary.total_apontado, 150.0)
+        self.assertAlmostEqual(summary.a_produzir, 326.0)
+
+    def test_image_match_uses_color_for_send_and_return(self) -> None:
+        images_dir = ROOT / "FOTOS PINTURA"
+
+        sent = find_painting_image(
+            images_dir, "DISPLAY ARAMADO G", "ENVIO - VERMELHO"
+        )
+        returned = find_painting_image(
+            images_dir, "DISPLAY ARAMADO G", "RETORNO - VERMELHO"
+        )
+
+        self.assertIsNotNone(sent)
+        self.assertEqual(sent, returned)
+        self.assertIn("VERMELHO", sent.name)
 
 
 if __name__ == "__main__":
