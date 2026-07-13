@@ -5,6 +5,8 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
+from filters import render_month_range_filter
+
 
 FILTER_COLUMNS = [
     ("cliente", "Cliente"),
@@ -64,14 +66,9 @@ def apply_painting_filters(frame: pd.DataFrame) -> pd.DataFrame:
     with st.sidebar:
         st.header("Filtros")
         if not dates.empty:
-            min_date = dates.min().date()
-            max_date = dates.max().date()
-            date_range = st.date_input(
-                "Período",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date,
-                key="painting_filter_period",
+            date_range = render_month_range_filter(
+                dates,
+                key="painting_filter_month_range",
             )
 
         available = frame.copy()

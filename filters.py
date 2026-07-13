@@ -189,7 +189,11 @@ def _month_key_to_date_range(month_key: str) -> tuple[date, date]:
     return period.start_time.date(), period.end_time.date()
 
 
-def _render_month_range_filter(dates: pd.Series) -> tuple[date, date] | None:
+def render_month_range_filter(
+    dates: pd.Series,
+    *,
+    key: str = "filter_month_range",
+) -> tuple[date, date] | None:
     parsed_dates = pd.to_datetime(dates, errors="coerce").dropna()
     if parsed_dates.empty:
         return None
@@ -199,7 +203,6 @@ def _render_month_range_filter(dates: pd.Series) -> tuple[date, date] | None:
     if not options:
         return None
 
-    key = "filter_month_range"
     current_range = _sanitize_month_range_state(key, options)
     start_label = _format_month_key(current_range[0])
     end_label = _format_month_key(current_range[1])
@@ -278,7 +281,7 @@ def apply_filters(
         date_range: tuple[date | None, date | None] | None = None
         if min_date is not None and max_date is not None:
             if period_mode == "month":
-                date_range = _render_month_range_filter(dates)
+                date_range = render_month_range_filter(dates)
             else:
                 date_range = st.date_input(
                     "Periodo",

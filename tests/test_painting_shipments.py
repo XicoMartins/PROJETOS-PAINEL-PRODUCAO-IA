@@ -4,6 +4,7 @@ import sys
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -12,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from data_loader import PAINTING_COLUMNS, _normalize_painting_frame
+from filters import render_month_range_filter
 from painting_filters import filter_painting_frame
 from services.painting_panel_service import (
     compute_painting_panel_summary,
@@ -22,6 +24,29 @@ from services.painting_panel_service import (
 
 
 class PaintingShipmentsTests(unittest.TestCase):
+    @patch("filters.st.markdown")
+    @patch("filters.st.select_slider", return_value=("2026-06", "2026-07"))
+    @patch(
+        "filters._sanitize_month_range_state",
+        return_value=("2026-06", "2026-07"),
+    )
+    def test_month_range_filter_matches_production_panel(
+        self,
+        _mock_sanitize,
+        mock_slider,
+        _mock_markdown,
+    ) -> None:
+        result = render_month_range_filter(
+            pd.Series(["2026-06-10", "2026-07-13"]),
+            key="painting_filter_month_range",
+        )
+
+        self.assertEqual(result, (date(2026, 6, 1), date(2026, 7, 31)))
+        self.assertEqual(
+            mock_slider.call_args.kwargs["key"],
+            "painting_filter_month_range",
+        )
+
     def test_painting_code_uses_last_four_digits(self) -> None:
         self.assertEqual(extract_painting_multiplier("26010476"), 476)
         self.assertEqual(extract_painting_multiplier("PINT-0054"), 54)
