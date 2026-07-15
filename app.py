@@ -191,13 +191,15 @@ def main() -> None:
     nav_tabs = [
         "Geral",
         "Painel Display",
-        "Gráficos",
         "Registros",
         "Integridade",
         "Painel TV",
         "Remessas pintura",
         "Painel de Produção",
     ]
+    if st.session_state.get("dashboard_sidebar_tab") == "Gráficos":
+        st.session_state["dashboard_sidebar_tab"] = "Painel Display"
+        st.session_state["display_panel_subtab"] = "Gráficos"
     if st.session_state.get("dashboard_sidebar_tab") not in [None, *nav_tabs]:
         st.session_state["dashboard_sidebar_tab"] = "Geral"
 
@@ -246,7 +248,6 @@ def main() -> None:
 
     tabs_with_filters = {
         "Painel Display",
-        "Gráficos",
         "Registros",
         "Remessas pintura",
         "Painel TV",
@@ -272,10 +273,16 @@ def main() -> None:
         render_kpis(filtered, filter_context)
     elif selected_tab == "Painel Display":
         _render_section_title("Painel Display")
-        render_display_panel(filtered, filter_context)
-    elif selected_tab == "Gráficos":
-        _render_section_title("Gráficos")
-        render_charts(filtered, filter_context)
+        selected_display_subtab = st.radio(
+            "Subtópicos do Painel Display",
+            ["Painel", "Gráficos"],
+            horizontal=True,
+            key="display_panel_subtab",
+        )
+        if selected_display_subtab == "Painel":
+            render_display_panel(filtered, filter_context)
+        else:
+            render_charts(filtered, filter_context)
     elif selected_tab == "Registros":
         _render_section_title("Registros")
         render_filtered_table(filtered, filter_context)
