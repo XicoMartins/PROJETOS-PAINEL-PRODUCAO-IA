@@ -335,8 +335,13 @@ def render_painting_shipments(frame: pd.DataFrame) -> None:
     if frame.empty:
         st.info("Nenhum lancamento de pintura encontrado para os filtros selecionados.")
         return
-    panel_tab, data_tab = st.tabs(["Painel", "Dados e graficos"])
-    with panel_tab:
+    selected_subtab = st.radio(
+        "Subtópicos de Remessas pintura",
+        ["Painel", "Dados e gráficos"],
+        horizontal=True,
+        key="painting_shipments_subtab",
+    )
+    if selected_subtab == "Painel":
         _render_panel(frame)
-    with data_tab:
+    else:
         _render_details(frame)

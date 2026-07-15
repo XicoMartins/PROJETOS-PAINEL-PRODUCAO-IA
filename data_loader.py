@@ -85,6 +85,37 @@ def _normalize_integer_text(series: pd.Series) -> pd.Series:
     return cleaned.mask(invalid, pd.NA)
 
 
+def _normalize_filter_text(series: pd.Series, *, lower: bool = False) -> pd.Series:
+    cleaned = series.astype("string").str.strip()
+    if lower:
+        cleaned = cleaned.str.lower()
+    invalid = cleaned.str.lower().isin(["", "none", "nan", "<na>"])
+    return cleaned.mask(invalid, pd.NA)
+
+
+def _add_filter_columns(frame: pd.DataFrame) -> None:
+    """Prepara uma vez as colunas usadas pelos filtros da interface."""
+    if "display" in frame.columns:
+        display = frame["display"].astype("string").str.replace(
+            r"(?i)\s*-\s*lote.*", "", regex=True
+        )
+        frame["display_clean"] = _normalize_filter_text(display)
+    if "maquinario" in frame.columns:
+        frame["maquinario_clean"] = _normalize_filter_text(
+            frame["maquinario"], lower=True
+        )
+    if "codigo_lote" in frame.columns:
+        frame["codigo_lote_clean"] = _normalize_filter_text(frame["codigo_lote"])
+    if "numero_display" in frame.columns:
+        frame["numero_display_clean"] = _normalize_integer_text(
+            frame["numero_display"]
+        )
+    if "processo" in frame.columns:
+        frame["processo_clean"] = _normalize_filter_text(frame["processo"])
+    if "operador" in frame.columns:
+        frame["operador_clean"] = _normalize_filter_text(frame["operador"])
+
+
 def _pick_forms_csv(forms_dir: Path) -> Path | None:
     if not forms_dir.exists():
         return None
@@ -416,6 +447,8 @@ def _normalize_loaded_frame(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     quality["nulls"] = {
         col: int(df_raw[col].isna().sum()) for col in key_cols if col in df_raw.columns
     }
+
+    _add_filter_columns(df_raw)
 
     return df_raw, quality
 

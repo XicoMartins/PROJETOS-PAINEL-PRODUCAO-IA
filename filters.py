@@ -80,6 +80,46 @@ def _normalize_integer_text(series: pd.Series) -> pd.Series:
     return _normalize_text(cleaned)
 
 
+def _ensure_filter_columns(df: pd.DataFrame) -> pd.DataFrame:
+    source_columns = {
+        "display": "display_clean",
+        "maquinario": "maquinario_clean",
+        "codigo_lote": "codigo_lote_clean",
+        "numero_display": "numero_display_clean",
+        "processo": "processo_clean",
+        "operador": "operador_clean",
+    }
+    missing = [
+        clean
+        for source, clean in source_columns.items()
+        if source in df.columns and clean not in df.columns
+    ]
+    if not missing:
+        return df
+
+    prepared = df.copy()
+    if "display_clean" in missing:
+        display = prepared["display"].astype("string").str.replace(
+            r"(?i)\s*-\s*lote.*", "", regex=True
+        )
+        prepared["display_clean"] = _normalize_text(display)
+    if "maquinario_clean" in missing:
+        prepared["maquinario_clean"] = _normalize_text(
+            prepared["maquinario"], lower=True
+        )
+    if "codigo_lote_clean" in missing:
+        prepared["codigo_lote_clean"] = _normalize_text(prepared["codigo_lote"])
+    if "numero_display_clean" in missing:
+        prepared["numero_display_clean"] = _normalize_integer_text(
+            prepared["numero_display"]
+        )
+    if "processo_clean" in missing:
+        prepared["processo_clean"] = _normalize_text(prepared["processo"])
+    if "operador_clean" in missing:
+        prepared["operador_clean"] = _normalize_text(prepared["operador"])
+    return prepared
+
+
 def _sorted_unique(series: pd.Series) -> list[str]:
     return sorted(series.dropna().unique())
 
@@ -240,33 +280,7 @@ def apply_filters(
     if df.empty:
         return df, FilterContext(filtered_no_operator=df.copy())
 
-    df_filter = df.copy()
-    if "display" in df_filter.columns:
-        df_filter["display_clean"] = (
-            _normalize_text(
-                df_filter["display"]
-                .astype("string")
-                .str.replace(
-                    r"(?i)\s*-\s*lote.*", "", regex=True
-                )
-            )
-        )
-    if "maquinario" in df_filter.columns:
-        df_filter["maquinario_clean"] = (
-            _normalize_text(df_filter["maquinario"], lower=True)
-        )
-    if "codigo_lote" in df_filter.columns:
-        df_filter["codigo_lote_clean"] = (
-            _normalize_text(df_filter["codigo_lote"])
-        )
-    if "numero_display" in df_filter.columns:
-        df_filter["numero_display_clean"] = (
-            _normalize_integer_text(df_filter["numero_display"])
-        )
-    if "processo" in df_filter.columns:
-        df_filter["processo_clean"] = _normalize_text(df_filter["processo"])
-    if "operador" in df_filter.columns:
-        df_filter["operador_clean"] = _normalize_text(df_filter["operador"])
+    df_filter = _ensure_filter_columns(df)
 
     dates = (
         df_filter["data_producao"].dropna()
@@ -324,7 +338,7 @@ def apply_filters(
             lote_label, lotes, key="filter_numero_display"
         )
 
-        available_machines = df_filter.copy()
+        available_machines = df_filter
         available_machines = _filter_by_selection(
             available_machines, "display_clean", display_selected
         )
@@ -343,7 +357,7 @@ def apply_filters(
             "Maquinario", machines, key="filter_maquinario"
         )
 
-        available_processes = df_filter.copy()
+        available_processes = df_filter
         available_processes = _filter_by_selection(
             available_processes, "display_clean", display_selected
         )
@@ -375,7 +389,7 @@ def apply_filters(
             "Operador", operators, key="filter_operador"
         )
 
-    filtered = df_filter.copy()
+    filtered = df_filter
     if date_range and len(date_range) == 2:
         start, end = date_range
         if start and end:
@@ -392,7 +406,7 @@ def apply_filters(
     if lote_col:
         filtered = _filter_by_selection(filtered, lote_col, lote_selected)
 
-    filtered_no_operator = filtered.copy()
+    filtered_no_operator = filtered
 
     filtered = _filter_by_operator_selection(filtered, operator_selected)
 

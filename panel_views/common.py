@@ -79,7 +79,13 @@ def render_prod_hora_kpis(df: pd.DataFrame, *, show_info: bool = True) -> None:
         )
 
 
-def build_display_image_map(images_dir: Path) -> dict[str, Path]:
+@st.cache_data(show_spinner=False)
+def _build_display_image_map_cached(
+    images_dir_str: str,
+    directory_mtime_ns: int | None,
+) -> dict[str, Path]:
+    del directory_mtime_ns
+    images_dir = Path(images_dir_str)
     if not images_dir.exists():
         return {}
     allowed = {".png", ".jpg", ".jpeg", ".webp"}
@@ -90,6 +96,17 @@ def build_display_image_map(images_dir: Path) -> dict[str, Path]:
             if key:
                 images[key] = path
     return images
+
+
+def build_display_image_map(images_dir: Path) -> dict[str, Path]:
+    try:
+        directory_mtime_ns = images_dir.stat().st_mtime_ns
+    except OSError:
+        directory_mtime_ns = None
+    return _build_display_image_map_cached(
+        str(images_dir.resolve()),
+        directory_mtime_ns,
+    )
 
 
 def render_panel_card(
@@ -172,7 +189,14 @@ def build_time_estimate_html(
     return f'<div class="panel-time-grid">{"".join(items)}</div>'
 
 
-def load_image_as_data_uri(path: Path) -> str | None:
+@st.cache_data(show_spinner=False)
+def _load_image_as_data_uri_cached(
+    path_str: str,
+    file_mtime_ns: int,
+    file_size: int,
+) -> str | None:
+    del file_mtime_ns, file_size
+    path = Path(path_str)
     if not path.exists():
         return None
     suffix = path.suffix.lower().lstrip(".")
@@ -182,6 +206,18 @@ def load_image_as_data_uri(path: Path) -> str | None:
         return None
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:image/{suffix};base64,{encoded}"
+
+
+def load_image_as_data_uri(path: Path) -> str | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return _load_image_as_data_uri_cached(
+        str(path.resolve()),
+        stat.st_mtime_ns,
+        stat.st_size,
+    )
 
 
 def render_dashboard_top_card(title: str, value: str, subtitle: str) -> None:
