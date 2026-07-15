@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import html
 from pathlib import Path
 
 import pandas as pd
@@ -235,14 +236,15 @@ def render_dashboard_top_card(title: str, value: str, subtitle: str) -> None:
 
 def render_dashboard_ranking_card(ranking_df: pd.DataFrame, label_col: str, format_int) -> None:
     if ranking_df.empty:
-        st.info("Sem dados para ranking no periodo atual.")
+        st.info("Sem dados para ranking no periodo selecionado.")
         return
     for pos, (_, row) in enumerate(ranking_df.iterrows(), start=1):
+        safe_label = html.escape(str(row[label_col]))
         st.markdown(
             f"""
             <div class="prod-rank-item">
                 <div class="prod-rank-pos">{pos}</div>
-                <div class="prod-rank-name">{row[label_col]}</div>
+                <div class="prod-rank-name" title="{safe_label}">{safe_label}</div>
                 <div class="prod-rank-value">{format_int(row["quantidade_produzida"])}</div>
             </div>
             """,

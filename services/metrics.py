@@ -109,6 +109,13 @@ def resolve_last_update_metric(
     if "data_producao" in base_df.columns:
         latest_date = pd.to_datetime(base_df["data_producao"], errors="coerce")
 
+    # A visao geral mostra apenas a data. Hora faz sentido somente quando o
+    # usuario esta acompanhando a ultima execucao de maquina ou processo.
+    if not maquinario_selected and not processo_selected and latest_date is not None:
+        latest_value = latest_date.dropna().max()
+        if pd.notna(latest_value):
+            return title, format_date(latest_value)
+
     latest_datetime = None
     if latest_date is not None and latest_date.notna().any():
         time_source = None
@@ -375,6 +382,8 @@ def compute_dashboard_metrics(df: pd.DataFrame) -> dict[str, float | None]:
         capacity_hours = active_hours
     inactive_hours = max(capacity_hours - active_hours, 0.0)
     availability = active_hours / capacity_hours if capacity_hours > 0 else None
+    if availability is not None:
+        availability = max(0.0, min(float(availability), 1.0))
 
     prod_rate = produced / active_hours if active_hours > 0 else None
     ideal_rate = estimate_ideal_rate(df)
@@ -448,7 +457,8 @@ def build_dashboard_gauge(
     value: float | None,
     inverse: bool = False,
 ) -> go.Figure:
-    if value is None or pd.isna(value):
+    has_value = value is not None and not pd.isna(value)
+    if not has_value:
         value_pct = 0.0
     else:
         value_pct = max(0.0, min(float(value) * 100, 100.0))
@@ -470,7 +480,7 @@ def build_dashboard_gauge(
 
     fig = go.Figure(
         go.Indicator(
-            mode="gauge+number",
+            mode="gauge+number" if has_value else "gauge",
             value=value_pct,
             title={"text": title, "font": {"size": 18}},
             number={"suffix": "%", "font": {"size": 30}},
@@ -491,4 +501,12 @@ def build_dashboard_gauge(
         paper_bgcolor="rgba(0, 0, 0, 0)",
         font=dict(color="#f5f7f8"),
     )
+    if not has_value:
+        fig.add_annotation(
+            text="N/A",
+            x=0.5,
+            y=0.18,
+            showarrow=False,
+            font={"size": 28, "color": "#f5f7f8"},
+        )
     return fig

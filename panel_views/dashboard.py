@@ -17,6 +17,51 @@ from services.metrics import (
 )
 
 
+def aggregate_selected_period(
+    df: pd.DataFrame,
+    dimension: str | None,
+    metric: str,
+    *,
+    limit: int | None = None,
+) -> pd.DataFrame:
+    """Aggregate every row that survived the sidebar period and field filters."""
+    if not dimension or dimension not in df.columns or metric not in df.columns:
+        return pd.DataFrame(columns=[dimension or "dimension", metric])
+
+    work = df[[dimension, metric]].copy()
+    labels = work[dimension].astype("string").str.strip()
+    invalid_labels = labels.str.lower().isin(["", "none", "nan", "<na>"])
+    work[dimension] = labels.mask(invalid_labels, "Nao informado").fillna(
+        "Nao informado"
+    )
+    work[metric] = pd.to_numeric(work[metric], errors="coerce").fillna(0)
+    summary = (
+        work.groupby(dimension, dropna=False)[metric]
+        .sum()
+        .sort_values(ascending=False)
+        .reset_index()
+    )
+    if limit is not None:
+        summary = summary.head(max(int(limit), 0)).reset_index(drop=True)
+    return summary
+
+
+def format_dashboard_scope(df: pd.DataFrame) -> str:
+    record_text = f"{format_int(len(df))} registros"
+    if "data_producao" not in df.columns:
+        return record_text
+
+    dates = pd.to_datetime(df["data_producao"], errors="coerce").dropna()
+    if dates.empty:
+        return record_text
+
+    start = dates.min().strftime("%d/%m/%Y")
+    end = dates.max().strftime("%d/%m/%Y")
+    if start == end:
+        return f"Periodo analisado: {start} | {record_text}"
+    return f"Periodo analisado: {start} a {end} | {record_text}"
+
+
 def render_production_dashboard(df: pd.DataFrame) -> None:
     st.markdown(
         """
@@ -46,10 +91,11 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
             margin-bottom: 8px;
         }
         .prod-top-value {
-            font-size: 2rem;
+            font-size: clamp(1.35rem, 1.8vw, 2rem);
             font-weight: 700;
             line-height: 1.2;
             color: #f7fbff;
+            white-space: nowrap;
         }
         .prod-top-sub {
             margin-top: 8px;
@@ -70,9 +116,10 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
             margin-bottom: 8px;
         }
         .prod-meta-value {
-            font-size: 1.9rem;
+            font-size: clamp(1.35rem, 1.7vw, 1.9rem);
             font-weight: 700;
             line-height: 1.2;
+            white-space: nowrap;
         }
         .prod-meta-sub {
             margin-top: 6px;
@@ -121,11 +168,13 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
     if df.empty:
         st.info("Nenhum dado apos os filtros.")
         return
+    st.caption(format_dashboard_scope(df))
 
     metrics = compute_dashboard_metrics(df)
 
     previous_metrics = None
     current_period_metrics = metrics
+    current_period = None
     data_series = (
         pd.to_datetime(df["data_producao"], errors="coerce")
         if "data_producao" in df.columns
@@ -142,11 +191,14 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
             previous_df = df[periods == previous_period]
             previous_metrics = compute_dashboard_metrics(previous_df)
 
+    comparison_prefix = (
+        f"{format_period_label(current_period)}: " if current_period is not None else ""
+    )
     top_cards = [
         (
             "Producao",
             format_int(metrics["produced"]),
-            format_period_delta(
+            comparison_prefix + format_period_delta(
                 current_period_metrics["produced"],
                 previous_metrics["produced"] if previous_metrics else None,
             ),
@@ -154,7 +206,7 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
         (
             "Horas Ativas",
             format_hours(metrics["active_hours"]),
-            format_period_delta(
+            comparison_prefix + format_period_delta(
                 current_period_metrics["active_hours"],
                 previous_metrics["active_hours"] if previous_metrics else None,
             ),
@@ -162,7 +214,7 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
         (
             "Horas Inativas",
             format_hours(metrics["inactive_hours"]),
-            format_period_delta(
+            comparison_prefix + format_period_delta(
                 current_period_metrics["inactive_hours"],
                 previous_metrics["inactive_hours"] if previous_metrics else None,
             ),
@@ -170,7 +222,7 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
         (
             "Refugo (Pecas)",
             format_int(metrics["scrap"]),
-            format_period_delta(
+            comparison_prefix + format_period_delta(
                 current_period_metrics["scrap"],
                 previous_metrics["scrap"] if previous_metrics else None,
             ),
@@ -178,7 +230,7 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
         (
             "OEE",
             format_percent(metrics["oee"], 2),
-            format_period_delta(
+            comparison_prefix + format_period_delta(
                 current_period_metrics["oee"],
                 previous_metrics["oee"] if previous_metrics else None,
             ),
@@ -231,9 +283,9 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
             unsafe_allow_html=True,
         )
         if target_value is not None and target_value > 0:
-            progress = int(min(max((metrics["produced"] / target_value) * 100, 0), 100))
-            st.progress(progress)
-            st.caption(f"{progress}% da meta atingida")
+            progress_percent = max((metrics["produced"] / target_value) * 100, 0)
+            st.progress(int(min(progress_percent, 100)))
+            st.caption(f"{progress_percent:.0f}% da meta atingida")
         else:
             st.info("Meta indisponivel (coluna quantidade_total vazia).")
 
@@ -275,38 +327,34 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
         else ("processo" if "processo" in dashboard_df.columns else setor_col)
     )
 
-    current_month_df = dashboard_df
-    valid_periods = dashboard_df["periodo"].dropna().unique()
-    if len(valid_periods) > 0:
-        active_period = sorted(valid_periods)[-1]
-        current_month_df = dashboard_df[dashboard_df["periodo"] == active_period]
-
     chart_row1 = st.columns(3)
     with chart_row1[0]:
-        st.markdown("**Producao mensal por setor**")
+        st.markdown("**Producao por setor no periodo**")
         if setor_col:
-            prod_setor = (
-                current_month_df.groupby(setor_col)["quantidade_produzida"]
-                .sum()
-                .sort_values(ascending=False)
-                .head(8)
-                .reset_index()
+            prod_setor = aggregate_selected_period(
+                dashboard_df,
+                setor_col,
+                "quantidade_produzida",
             )
             if prod_setor.empty:
-                st.info("Sem dados para o periodo atual.")
+                st.info("Sem dados para o periodo selecionado.")
             else:
+                prod_setor = prod_setor.sort_values(
+                    "quantidade_produzida", ascending=True
+                )
                 fig_setor = px.bar(
                     prod_setor,
-                    x=setor_col,
-                    y="quantidade_produzida",
+                    x="quantidade_produzida",
+                    y=setor_col,
+                    orientation="h",
                     text="quantidade_produzida",
                 )
-                fig_setor.update_traces(texttemplate="%{text:.0f}", textposition="outside")
+                fig_setor.update_traces(texttemplate="%{text:.0f}", textposition="auto")
                 fig_setor.update_layout(
-                    height=320,
+                    height=max(320, 38 * len(prod_setor) + 90),
                     margin=dict(l=8, r=8, t=10, b=10),
-                    xaxis_title="Setor",
-                    yaxis_title="Qtd.",
+                    xaxis_title="Qtd.",
+                    yaxis_title="Setor",
                 )
                 st.plotly_chart(
                     fig_setor, width="stretch", config={"displayModeBar": False}
@@ -397,30 +445,32 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
 
     chart_row2 = st.columns(3)
     with chart_row2[0]:
-        st.markdown("**Refugo mensal por setor**")
+        st.markdown("**Refugo por setor no periodo**")
         if setor_col:
-            refugo_setor = (
-                current_month_df.groupby(setor_col)["pecas_mortas"]
-                .sum()
-                .sort_values(ascending=False)
-                .head(8)
-                .reset_index()
+            refugo_setor = aggregate_selected_period(
+                dashboard_df,
+                setor_col,
+                "pecas_mortas",
             )
             if refugo_setor.empty:
-                st.info("Sem dados de refugo para o periodo atual.")
+                st.info("Sem dados de refugo para o periodo selecionado.")
             else:
+                refugo_setor = refugo_setor.sort_values(
+                    "pecas_mortas", ascending=True
+                )
                 fig_refugo = px.bar(
                     refugo_setor,
-                    x=setor_col,
-                    y="pecas_mortas",
+                    x="pecas_mortas",
+                    y=setor_col,
+                    orientation="h",
                     text="pecas_mortas",
                 )
-                fig_refugo.update_traces(texttemplate="%{text:.0f}", textposition="outside")
+                fig_refugo.update_traces(texttemplate="%{text:.0f}", textposition="auto")
                 fig_refugo.update_layout(
-                    height=320,
+                    height=max(320, 38 * len(refugo_setor) + 90),
                     margin=dict(l=8, r=8, t=10, b=10),
-                    xaxis_title="Setor",
-                    yaxis_title="Refugo",
+                    xaxis_title="Refugo",
+                    yaxis_title="Setor",
                 )
                 st.plotly_chart(
                     fig_refugo, width="stretch", config={"displayModeBar": False}
@@ -429,31 +479,29 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
             st.info("Coluna de setor nao encontrada.")
 
     with chart_row2[1]:
-        st.markdown("**Ranking mensal por setor**")
+        st.markdown("**Ranking por setor no periodo**")
         if setor_col:
-            ranking_setor = (
-                current_month_df.groupby(setor_col)["quantidade_produzida"]
-                .sum()
-                .sort_values(ascending=False)
-                .head(3)
-                .reset_index()
+            ranking_setor = aggregate_selected_period(
+                dashboard_df,
+                setor_col,
+                "quantidade_produzida",
+                limit=3,
             )
             render_dashboard_ranking_card(ranking_setor, setor_col, format_int)
         else:
             st.info("Coluna de setor nao encontrada.")
 
     with chart_row2[2]:
-        st.markdown("**Producao mensal por aplicacao**")
+        st.markdown("**Producao por aplicacao no periodo**")
         if aplicacao_col:
-            prod_app = (
-                current_month_df.groupby(aplicacao_col)["quantidade_produzida"]
-                .sum()
-                .sort_values(ascending=True)
-                .tail(8)
-                .reset_index()
+            prod_app = aggregate_selected_period(
+                dashboard_df,
+                aplicacao_col,
+                "quantidade_produzida",
             )
+            prod_app = prod_app.sort_values("quantidade_produzida", ascending=True)
             if prod_app.empty:
-                st.info("Sem dados por aplicacao no periodo atual.")
+                st.info("Sem dados por aplicacao no periodo selecionado.")
             else:
                 fig_app = px.bar(
                     prod_app,

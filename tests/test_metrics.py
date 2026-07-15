@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 
 from filters import FilterContext
 from services.metrics import compute_dashboard_metrics, resolve_last_update_metric
+from services.metrics import build_dashboard_gauge
 
 
 class MetricsServiceTests(unittest.TestCase):
@@ -80,6 +81,36 @@ class MetricsServiceTests(unittest.TestCase):
         self.assertAlmostEqual(metrics["scrap_rate"], 0.2)
         self.assertAlmostEqual(metrics["oee"], 0.32)
         self.assertAlmostEqual(metrics["target_total"], 200.0)
+
+    @patch("services.metrics.estimate_target_total", return_value=100.0)
+    @patch("services.metrics.estimate_ideal_rate", return_value=10.0)
+    @patch("services.metrics.estimate_capacity_hours", return_value=5.0)
+    def test_availability_is_capped_at_one_and_does_not_inflate_oee(
+        self,
+        _mock_capacity_hours,
+        _mock_ideal_rate,
+        _mock_target_total,
+    ) -> None:
+        df = pd.DataFrame(
+            {
+                "quantidade_produzida": [80],
+                "pecas_mortas": [20],
+                "duracao_horas": [10.0],
+            }
+        )
+
+        metrics = compute_dashboard_metrics(df)
+
+        self.assertEqual(metrics["availability"], 1.0)
+        self.assertAlmostEqual(metrics["performance"], 0.8)
+        self.assertAlmostEqual(metrics["quality"], 0.8)
+        self.assertAlmostEqual(metrics["oee"], 0.64)
+
+    def test_gauge_shows_na_when_metric_is_unavailable(self) -> None:
+        figure = build_dashboard_gauge("OEE", None)
+
+        self.assertEqual(figure.data[0]["mode"], "gauge")
+        self.assertEqual(figure.layout.annotations[0]["text"], "N/A")
 
 
 if __name__ == "__main__":
