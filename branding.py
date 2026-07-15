@@ -34,6 +34,7 @@ def apply_branding(*, show_header: bool = True, use_background: bool = True) -> 
         .stApp {{
             background: #0d1117;
             color: #f5f7f8;
+            color-scheme: dark;
             --app-title-size: clamp(2rem, 2vw + 1.2rem, 3.2rem);
             --section-title-size: clamp(1.2rem, 1vw + 0.8rem, 2rem);
             --metric-title-size: clamp(0.72rem, 0.35vw + 0.62rem, 0.98rem);
@@ -43,7 +44,69 @@ def apply_branding(*, show_header: bool = True, use_background: bool = True) -> 
             --panel-sub-size: clamp(0.78rem, 0.35vw + 0.7rem, 1rem);
         }}
         header[data-testid="stHeader"] {{
-            background: #0d1117;
+            background: #0d1117 !important;
+            color: #f5f7f8 !important;
+        }}
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"] {{
+            background: #0d1117 !important;
+            color: #f5f7f8 !important;
+        }}
+        .stApp p,
+        .stApp label,
+        .stApp legend,
+        .stApp [data-testid="stMarkdownContainer"] {{
+            color: #f5f7f8;
+        }}
+        .stApp [data-baseweb="input"] > div,
+        .stApp [data-baseweb="textarea"] > div,
+        .stApp [data-baseweb="select"] > div {{
+            background: #172027 !important;
+            border-color: #35535b !important;
+            color: #f5f7f8 !important;
+        }}
+        .stApp input,
+        .stApp textarea,
+        .stApp [data-baseweb="select"] input {{
+            background: transparent !important;
+            color: #f5f7f8 !important;
+            -webkit-text-fill-color: #f5f7f8 !important;
+            caret-color: #7cd4d4;
+        }}
+        .stApp input::placeholder,
+        .stApp textarea::placeholder {{
+            color: #91a0a8 !important;
+            -webkit-text-fill-color: #91a0a8 !important;
+            opacity: 1;
+        }}
+        .stApp [data-baseweb="input"] svg,
+        .stApp [data-baseweb="select"] svg {{
+            fill: #d7e4e7 !important;
+            color: #d7e4e7 !important;
+        }}
+        .stApp div[data-testid="stForm"] {{
+            background: #10171d;
+            border-color: #263840;
+        }}
+        .stApp .stButton > button,
+        .stApp .stFormSubmitButton > button {{
+            background: #00a3a3 !important;
+            border: 1px solid #25b8b8 !important;
+            color: #06191c !important;
+            font-weight: 700;
+        }}
+        .stApp .stButton > button:hover,
+        .stApp .stFormSubmitButton > button:hover {{
+            background: #19b5b5 !important;
+            border-color: #7cd4d4 !important;
+            color: #041416 !important;
+        }}
+        .stApp .stButton > button:disabled,
+        .stApp .stFormSubmitButton > button:disabled {{
+            background: #284248 !important;
+            border-color: #35535b !important;
+            color: #aebbbf !important;
+            opacity: 1;
         }}
         .block-container {{
             max-width: 1180px;

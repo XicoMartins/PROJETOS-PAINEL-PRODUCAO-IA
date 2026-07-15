@@ -1,2 +1,11 @@
 [server]
 port = 8501
+
+[theme]
+base = "dark"
+primaryColor = "#00a3a3"
+backgroundColor = "#0d1117"
+secondaryBackgroundColor = "#172027"
+textColor = "#f5f7f8"
+borderColor = "#35535b"
+showWidgetBorder = true
