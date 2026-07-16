@@ -165,6 +165,29 @@ def render_production_dashboard(
             font-size: 0.88rem;
             color: #bdd0e5;
         }
+        .efficiency-info-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: nowrap;
+            gap: 6px 14px;
+            width: 100%;
+            overflow-x: auto;
+            margin: 2px 0 14px;
+            padding: 7px 12px;
+            border: 1px solid rgba(182, 205, 227, 0.24);
+            border-radius: 8px;
+            background: rgba(18, 40, 66, 0.35);
+            color: #bdd0e5;
+            font-size: clamp(0.68rem, 0.75vw, 0.78rem);
+            line-height: 1.25;
+        }
+        .efficiency-info-row span {
+            white-space: nowrap;
+        }
+        .efficiency-info-row strong {
+            color: #f5f7f8;
+        }
         .prod-rank-item {
             display: grid;
             grid-template-columns: 36px 1fr auto;
@@ -298,6 +321,10 @@ def render_production_dashboard(
         with top_cols[idx]:
             render_dashboard_top_card(card[0], card[1], card[2])
 
+    efficiency_month_delta = format_efficiency_period_delta(
+        current_efficiency_result,
+        previous_efficiency_result,
+    )
     gauge_cols = st.columns(5)
     with gauge_cols[0]:
         st.plotly_chart(
@@ -314,19 +341,6 @@ def render_production_dashboard(
             ),
             width="stretch",
             config={"displayModeBar": False},
-        )
-        st.caption(format_efficiency_coverage(efficiency_result))
-        efficiency_month_delta = format_efficiency_period_delta(
-            current_efficiency_result,
-            previous_efficiency_result,
-        )
-        st.caption(f"{comparison_prefix}{efficiency_month_delta}")
-        st.caption(
-            "Compara o tempo padrao necessario com o tempo real utilizado."
-        )
-        st.caption(
-            "Referencia historica: taxa media ponderada do melhor operador "
-            "em cada display, maquinario e processo."
         )
     with gauge_cols[2]:
         st.plotly_chart(
@@ -361,6 +375,17 @@ def render_production_dashboard(
             st.caption(f"{progress_percent:.0f}% da meta atingida")
         else:
             st.info("Meta indisponivel (coluna quantidade_total vazia).")
+
+    st.markdown(
+        f"""
+        <div class="efficiency-info-row" title="A eficiencia compara o tempo padrao necessario para produzir a quantidade apontada com o tempo real utilizado. A referencia e a taxa media ponderada do melhor operador de cada display, maquinario e processo.">
+            <span><strong>{format_efficiency_coverage(efficiency_result)}</strong></span>
+            <span>{comparison_prefix}{efficiency_month_delta.replace(" vs mes anterior", "")}</span>
+            <span>Padrao: melhor operador por processo</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if not efficiency_result.has_registered_standards:
         st.info(
