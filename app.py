@@ -294,7 +294,7 @@ def main() -> None:
         render_tv_panel(filtered, filter_context)
     elif selected_tab == "Painel de Produção":
         _render_section_title("Painel de Produção")
-        render_production_dashboard(filtered)
+        render_production_dashboard(filtered, reference_df=df)
     elif selected_tab == "Remessas pintura":
         render_painting_shipments(filtered)
 

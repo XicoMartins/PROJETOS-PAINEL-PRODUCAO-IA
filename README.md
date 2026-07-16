@@ -7,6 +7,25 @@ Painel Streamlit para analise dos lancamentos do FORMS-MTECH.
 Em producao, o painel le a tabela `production_entries` usando a mesma `DATABASE_URL`
 configurada no app de lancamentos.
 
+## Padrao produtivo para eficiencia operacional
+
+As planilhas da pasta `planilhas` podem receber uma das colunas opcionais abaixo
+na mesma linha de cada combinacao de `FERRAMENTAL` e `PROCESSO`:
+
+- `pecas_por_hora_padrao`: taxa padrao em pecas por hora (prioritaria).
+- `tempo_padrao_min_por_peca`: alternativa em minutos por peca, convertida por
+  `60 / minutos`.
+
+Nao preencha as duas colunas em linhas duplicadas para a mesma combinacao. Quando
+mais de um padrao e encontrado para o mesmo maquinario e processo, o painel marca
+a combinacao como duplicada e nao a utiliza. Planilhas sem essas colunas continuam
+compativeis. Quando nao existe um padrao explicito, o painel usa como referencia
+a taxa media ponderada do melhor operador no historico completo da fonte para a
+mesma combinacao de display, maquinario e processo. Essa taxa e calculada como
+`soma(producao + refugo) / soma(horas validas)` para cada operador; o maior
+resultado positivo se torna o padrao historico. O padrao da planilha sempre tem
+prioridade, e combinacoes duplicadas na planilha nao usam fallback silencioso.
+
 Configure nos Secrets do Streamlit Cloud:
 
 ```toml

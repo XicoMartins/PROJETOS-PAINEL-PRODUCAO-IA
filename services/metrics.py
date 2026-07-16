@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import timedelta
 
 import pandas as pd
@@ -7,6 +8,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from filters import FilterContext
+from services.operational_efficiency import (
+    OperationalEfficiencyResult,
+    calculate_operational_efficiency,
+)
 from services.planilha_service import (
     extract_lote_from_numero_display,
     find_planilha_for_display,
@@ -240,7 +245,12 @@ def estimate_capacity_hours(df: pd.DataFrame) -> float | None:
     return capacity_hours
 
 
-def estimate_ideal_rate(df: pd.DataFrame) -> float | None:
+def estimate_historical_p90_rate(df: pd.DataFrame) -> float | None:
+    """Historical P90 production-rate benchmark; not operational efficiency.
+
+    This diagnostic intentionally remains isolated. It mixes the filtered
+    population and must not be used as the primary efficiency or OEE factor.
+    """
     required = {"quantidade_produzida", "duracao_horas"}
     if not required.issubset(df.columns):
         return None
@@ -355,7 +365,10 @@ def estimate_target_total(df: pd.DataFrame) -> float | None:
     return float(max_target)
 
 
-def compute_dashboard_metrics(df: pd.DataFrame) -> dict[str, float | None]:
+def compute_dashboard_metrics(
+    df: pd.DataFrame,
+    efficiency_result: OperationalEfficiencyResult | None = None,
+) -> dict[str, float | None]:
     produced = (
         pd.to_numeric(df["quantidade_produzida"], errors="coerce").fillna(0).sum()
         if "quantidade_produzida" in df.columns
@@ -385,13 +398,10 @@ def compute_dashboard_metrics(df: pd.DataFrame) -> dict[str, float | None]:
     if availability is not None:
         availability = max(0.0, min(float(availability), 1.0))
 
-    prod_rate = produced / active_hours if active_hours > 0 else None
-    ideal_rate = estimate_ideal_rate(df)
-    performance = (
-        prod_rate / ideal_rate if prod_rate is not None and ideal_rate is not None else None
-    )
-    if performance is not None:
-        performance = max(0.0, min(float(performance), 1.0))
+    if efficiency_result is None:
+        efficiency_result = calculate_operational_efficiency(df)
+    operational_efficiency = efficiency_result.raw_efficiency
+    efficiency_oee = efficiency_result.oee_efficiency
 
     target_total = estimate_target_total(df)
     productivity = produced / target_total if target_total and target_total > 0 else None
@@ -400,8 +410,8 @@ def compute_dashboard_metrics(df: pd.DataFrame) -> dict[str, float | None]:
 
     scrap_rate = scrap / total_processed if total_processed > 0 else None
     oee = (
-        availability * performance * quality
-        if availability is not None and performance is not None and quality is not None
+        availability * efficiency_oee * quality
+        if availability is not None and efficiency_oee is not None and quality is not None
         else None
     )
     if oee is not None:
@@ -414,7 +424,11 @@ def compute_dashboard_metrics(df: pd.DataFrame) -> dict[str, float | None]:
         "inactive_hours": float(inactive_hours),
         "quality": quality,
         "availability": availability,
-        "performance": performance,
+        "performance": operational_efficiency,
+        "efficiency_operational": operational_efficiency,
+        "efficiency_oee": efficiency_oee,
+        "efficiency_coverage_hours": efficiency_result.coverage_hours,
+        "efficiency_coverage_records": efficiency_result.coverage_records,
         "productivity": productivity,
         "scrap_rate": scrap_rate,
         "oee": oee,
@@ -456,12 +470,21 @@ def build_dashboard_gauge(
     title: str,
     value: float | None,
     inverse: bool = False,
+    *,
+    allow_above_100: bool = False,
 ) -> go.Figure:
+    title_font_size = 11 if len(title) > 18 else 18
     has_value = value is not None and not pd.isna(value)
     if not has_value:
         value_pct = 0.0
     else:
-        value_pct = max(0.0, min(float(value) * 100, 100.0))
+        raw_value_pct = max(0.0, float(value) * 100)
+        value_pct = raw_value_pct if allow_above_100 else min(raw_value_pct, 100.0)
+    gauge_max = (
+        max(100.0, math.ceil(value_pct / 25.0) * 25.0)
+        if allow_above_100 and value_pct > 100
+        else 100.0
+    )
 
     if inverse:
         steps = [
@@ -482,11 +505,11 @@ def build_dashboard_gauge(
         go.Indicator(
             mode="gauge+number" if has_value else "gauge",
             value=value_pct,
-            title={"text": title, "font": {"size": 18}},
+            title={"text": title, "font": {"size": title_font_size}},
             number={"suffix": "%", "font": {"size": 30}},
             gauge={
                 "shape": "angular",
-                "axis": {"range": [0, 100], "tickcolor": "#afc3d9"},
+                "axis": {"range": [0, gauge_max], "tickcolor": "#afc3d9"},
                 "bar": {"color": bar_color, "thickness": 0.25},
                 "bgcolor": "rgba(18, 40, 66, 0.35)",
                 "borderwidth": 1,

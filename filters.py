@@ -262,7 +262,6 @@ def render_month_range_filter(
     selected_range = st.select_slider(
         "Intervalo de Meses",
         options=options,
-        value=current_range,
         format_func=_format_month_key,
         key=key,
         label_visibility="collapsed",

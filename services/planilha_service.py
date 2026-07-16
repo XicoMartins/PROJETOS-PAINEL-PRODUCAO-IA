@@ -12,6 +12,16 @@ from filters import FilterContext
 
 
 PLANILHA_FILENAME_PREFIX = "LISTA DE PROCESSO"
+STANDARD_RATE_ALIASES = {
+    "pecas_por_hora_padrao",
+    "peca_por_hora_padrao",
+    "pecas_hora_padrao",
+}
+STANDARD_MINUTES_ALIASES = {
+    "tempo_padrao_min_por_peca",
+    "tempo_padrao_minuto_por_peca",
+    "minutos_padrao_por_peca",
+}
 
 
 def normalize_display_name(text: str) -> str:
@@ -44,6 +54,52 @@ def normalize_planilha_lookup_key(text: str) -> str:
 
 def normalize_process_name(text: str) -> str:
     return normalize_display_name(text)
+
+
+def _positive_finite_number(value) -> float | None:
+    normalized = (
+        str(value).strip().replace(",", ".")
+        if isinstance(value, str)
+        else value
+    )
+    numeric = pd.to_numeric(pd.Series([normalized]), errors="coerce").iloc[0]
+    if pd.isna(numeric):
+        return None
+    numeric = float(numeric)
+    if not math.isfinite(numeric) or numeric <= 0:
+        return None
+    return numeric
+
+
+def resolve_standard_rate(
+    pecas_por_hora_padrao=None,
+    tempo_padrao_min_por_peca=None,
+) -> tuple[float | None, str | None]:
+    """Return a valid standard rate in pieces/hour and its source column.
+
+    A positive ``pecas_por_hora_padrao`` has priority. Otherwise a positive
+    standard time in minutes/piece is converted with ``60 / minutes``. Invalid,
+    zero, negative, infinite and textual values do not produce a standard.
+    """
+    pieces_per_hour = _positive_finite_number(pecas_por_hora_padrao)
+    if pieces_per_hour is not None:
+        return pieces_per_hour, "pecas_por_hora_padrao"
+
+    minutes_per_piece = _positive_finite_number(tempo_padrao_min_por_peca)
+    if minutes_per_piece is None:
+        return None, None
+    return 60.0 / minutes_per_piece, "tempo_padrao_min_por_peca"
+
+
+def _find_column_by_aliases(df: pd.DataFrame, aliases: set[str]):
+    normalized_columns = {
+        normalize_display_name(column): column for column in df.columns
+    }
+    for alias in aliases:
+        column = normalized_columns.get(alias)
+        if column is not None:
+            return column
+    return None
 
 
 def build_planilha_file_map(planilhas_dir: Path) -> dict[str, Path]:
@@ -128,25 +184,59 @@ def load_planilha_processes(path_str: str, mtime: float | None) -> pd.DataFrame:
     if df.empty or len(df.columns) < 5:
         return pd.DataFrame()
 
-    maquinario_col = df.columns[2]
-    process_col = None
-    for col in df.columns:
-        if str(col).strip().lower() == "processo":
-            process_col = col
-            break
-    if process_col is None:
-        process_col = df.columns[3]
-    qnt_col = df.columns[4]
+    maquinario_col = _find_column_by_aliases(
+        df, {"ferramental", "maquinario", "maquina"}
+    ) or df.columns[2]
+    process_col = _find_column_by_aliases(df, {"processo"}) or df.columns[3]
+    qnt_col = _find_column_by_aliases(
+        df, {"qnt", "quantidade_por_produto", "qnt_por_produto"}
+    ) or df.columns[4]
+    pieces_hour_col = _find_column_by_aliases(df, STANDARD_RATE_ALIASES)
+    minutes_piece_col = _find_column_by_aliases(df, STANDARD_MINUTES_ALIASES)
 
-    plan = df[[maquinario_col, process_col, qnt_col]].copy()
+    selected_columns = [maquinario_col, process_col, qnt_col]
+    for optional_column in (pieces_hour_col, minutes_piece_col):
+        if optional_column is not None and optional_column not in selected_columns:
+            selected_columns.append(optional_column)
+
+    plan = df[selected_columns].copy()
     plan["maquinario_nome"] = plan[maquinario_col].astype("string").str.strip()
     plan["processo_nome"] = plan[process_col].astype("string").str.strip()
+    invalid_machine = plan["maquinario_nome"].str.lower().isin(
+        ["", "none", "nan", "<na>"]
+    )
+    invalid_process = plan["processo_nome"].str.lower().isin(
+        ["", "none", "nan", "<na>"]
+    )
+    plan.loc[invalid_machine, "maquinario_nome"] = pd.NA
+    plan.loc[invalid_process, "processo_nome"] = pd.NA
     plan["maquinario_key"] = plan[maquinario_col].apply(normalize_process_name)
     plan["processo_key"] = plan[process_col].apply(normalize_process_name)
     plan["qnt_por_produto"] = pd.to_numeric(plan[qnt_col], errors="coerce")
-    plan = plan.dropna(subset=["maquinario_key", "processo_key", "qnt_por_produto"])
+    plan = plan.dropna(
+        subset=["maquinario_nome", "processo_nome", "qnt_por_produto"]
+    )
     if plan.empty:
         return pd.DataFrame()
+
+    pieces_hour_values = (
+        plan[pieces_hour_col]
+        if pieces_hour_col is not None
+        else pd.Series(pd.NA, index=plan.index, dtype="object")
+    )
+    minutes_piece_values = (
+        plan[minutes_piece_col]
+        if minutes_piece_col is not None
+        else pd.Series(pd.NA, index=plan.index, dtype="object")
+    )
+    resolved = [
+        resolve_standard_rate(pieces_hour, minutes_piece)
+        for pieces_hour, minutes_piece in zip(
+            pieces_hour_values, minutes_piece_values
+        )
+    ]
+    plan["standard_rate_pph"] = [item[0] for item in resolved]
+    plan["standard_source"] = [item[1] for item in resolved]
 
     name_map = (
         plan[["processo_key", "processo_nome"]]
@@ -154,13 +244,43 @@ def load_planilha_processes(path_str: str, mtime: float | None) -> pd.DataFrame:
         .drop_duplicates(subset=["processo_key"], keep="first")
         .set_index("processo_key")["processo_nome"]
     )
-    grouped = (
-        plan.groupby(["maquinario_key", "processo_key"])["qnt_por_produto"]
-        .sum()
-        .reset_index()
+    machine_name_map = (
+        plan[["maquinario_key", "maquinario_nome"]]
+        .dropna(subset=["maquinario_nome"])
+        .drop_duplicates(subset=["maquinario_key"], keep="first")
+        .set_index("maquinario_key")["maquinario_nome"]
     )
-    grouped["processo_nome"] = grouped["processo_key"].map(name_map)
-    return grouped
+
+    rows = []
+    for (machine_key, process_key), group in plan.groupby(
+        ["maquinario_key", "processo_key"], dropna=False
+    ):
+        valid_standards = group.dropna(subset=["standard_rate_pph"])
+        duplicate_standard = len(valid_standards) > 1
+        standard_rate = (
+            float(valid_standards.iloc[0]["standard_rate_pph"])
+            if len(valid_standards) == 1
+            else None
+        )
+        standard_source = (
+            str(valid_standards.iloc[0]["standard_source"])
+            if len(valid_standards) == 1
+            else None
+        )
+        rows.append(
+            {
+                "maquinario_key": machine_key,
+                "processo_key": process_key,
+                "qnt_por_produto": group["qnt_por_produto"].sum(),
+                "processo_nome": name_map.get(process_key),
+                "maquinario_nome": machine_name_map.get(machine_key),
+                "standard_rate_pph": standard_rate,
+                "standard_source": standard_source,
+                "standard_duplicate": duplicate_standard,
+                "has_standard_value": not valid_standards.empty,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def find_planilha_for_display(

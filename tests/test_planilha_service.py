@@ -16,6 +16,7 @@ from filters import FilterContext
 from services.planilha_service import (
     build_display_planilha_filename_map,
     build_remaining_by_process,
+    load_planilha_processes,
     round_piece_total,
 )
 
@@ -34,6 +35,53 @@ class PlanilhaServiceTests(unittest.TestCase):
     def test_round_piece_total_removes_planilha_float_noise(self) -> None:
         self.assertEqual(round_piece_total(13.0000003), 13.0)
         self.assertEqual(round_piece_total(89.9999992), 90.0)
+
+    @patch("services.planilha_service.pd.read_excel")
+    def test_loader_accepts_both_standard_columns_and_prioritizes_hour_rate(
+        self, mock_read_excel
+    ) -> None:
+        mock_read_excel.return_value = pd.DataFrame(
+            {
+                "CLIENTE": ["Cliente"],
+                "ACABADO": ["Display X"],
+                "FERRAMENTAL": ["Maquina A"],
+                "PROCESSO": ["Processo A"],
+                "QNT": [1],
+                "QNT TOTAL": [100],
+                "pecas_por_hora_padrao": [50],
+                "tempo_padrao_min_por_peca": [2],
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "padrao.xlsx"
+            path.touch()
+            plan = load_planilha_processes(str(path), path.stat().st_mtime)
+
+        self.assertEqual(plan.loc[0, "standard_rate_pph"], 50.0)
+        self.assertEqual(plan.loc[0, "standard_source"], "pecas_por_hora_padrao")
+
+    @patch("services.planilha_service.pd.read_excel")
+    def test_loader_marks_duplicate_standards_for_same_combination(
+        self, mock_read_excel
+    ) -> None:
+        mock_read_excel.return_value = pd.DataFrame(
+            {
+                "CLIENTE": ["Cliente", "Cliente"],
+                "ACABADO": ["Display X", "Display X"],
+                "FERRAMENTAL": ["Maquina A", "Maquina A"],
+                "PROCESSO": ["Processo A", "Processo A"],
+                "QNT": [1, 2],
+                "QNT TOTAL": [100, 200],
+                "pecas_por_hora_padrao": [50, 60],
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "duplicado.xlsx"
+            path.touch()
+            plan = load_planilha_processes(str(path), path.stat().st_mtime)
+
+        self.assertTrue(bool(plan.loc[0, "standard_duplicate"]))
+        self.assertTrue(pd.isna(plan.loc[0, "standard_rate_pph"]))
 
     @patch("services.planilha_service.load_planilha_processes")
     @patch("services.planilha_service.find_planilha_for_display")

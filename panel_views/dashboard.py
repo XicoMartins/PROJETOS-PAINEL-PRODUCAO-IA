@@ -6,6 +6,12 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from panel_views.common import render_dashboard_ranking_card, render_dashboard_top_card
+from services.operational_efficiency import (
+    OperationalEfficiencyResult,
+    build_effective_standard_catalog,
+    calculate_efficiency_period_change,
+    calculate_operational_efficiency,
+)
 from services.metrics import (
     build_dashboard_gauge,
     compute_dashboard_metrics,
@@ -62,7 +68,40 @@ def format_dashboard_scope(df: pd.DataFrame) -> str:
     return f"Periodo analisado: {start} a {end} | {record_text}"
 
 
-def render_production_dashboard(df: pd.DataFrame) -> None:
+def format_reliable_period_delta(
+    current: float | None,
+    previous: float | None,
+) -> str:
+    if current is None or previous is None:
+        return "Sem base comparativa confiavel"
+    return format_period_delta(current, previous)
+
+
+def format_efficiency_coverage(result: OperationalEfficiencyResult) -> str:
+    if result.coverage_hours is None:
+        return "Cobertura: N/A"
+    return f"Cobertura: {result.coverage_hours * 100:.1f}% das horas".replace(
+        ".", ","
+    )
+
+
+def format_efficiency_period_delta(
+    current: OperationalEfficiencyResult,
+    previous: OperationalEfficiencyResult | None,
+) -> str:
+    if previous is None:
+        return "Sem base comparativa confiavel"
+    change = calculate_efficiency_period_change(current, previous)
+    if change is None:
+        return "Sem base comparativa confiavel"
+    sign = "+" if change >= 0 else ""
+    return f"{sign}{change * 100:.1f}% vs mes anterior"
+
+
+def render_production_dashboard(
+    df: pd.DataFrame,
+    reference_df: pd.DataFrame | None = None,
+) -> None:
     st.markdown(
         """
         <style>
@@ -170,10 +209,17 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
         return
     st.caption(format_dashboard_scope(df))
 
-    metrics = compute_dashboard_metrics(df)
+    standard_catalog = build_effective_standard_catalog(
+        reference_df if reference_df is not None else df,
+        df,
+    )
+    efficiency_result = calculate_operational_efficiency(df, standard_catalog)
+    metrics = compute_dashboard_metrics(df, efficiency_result)
 
     previous_metrics = None
+    previous_efficiency_result = None
     current_period_metrics = metrics
+    current_efficiency_result = efficiency_result
     current_period = None
     data_series = (
         pd.to_datetime(df["data_producao"], errors="coerce")
@@ -185,11 +231,21 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
     if available_periods:
         current_period = available_periods[-1]
         current_df = df[periods == current_period]
-        current_period_metrics = compute_dashboard_metrics(current_df)
+        current_efficiency_result = calculate_operational_efficiency(
+            current_df, standard_catalog
+        )
+        current_period_metrics = compute_dashboard_metrics(
+            current_df, current_efficiency_result
+        )
         if len(available_periods) > 1:
             previous_period = available_periods[-2]
             previous_df = df[periods == previous_period]
-            previous_metrics = compute_dashboard_metrics(previous_df)
+            previous_efficiency_result = calculate_operational_efficiency(
+                previous_df, standard_catalog
+            )
+            previous_metrics = compute_dashboard_metrics(
+                previous_df, previous_efficiency_result
+            )
 
     comparison_prefix = (
         f"{format_period_label(current_period)}: " if current_period is not None else ""
@@ -230,7 +286,7 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
         (
             "OEE",
             format_percent(metrics["oee"], 2),
-            comparison_prefix + format_period_delta(
+            comparison_prefix + format_reliable_period_delta(
                 current_period_metrics["oee"],
                 previous_metrics["oee"] if previous_metrics else None,
             ),
@@ -251,9 +307,26 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
         )
     with gauge_cols[1]:
         st.plotly_chart(
-            build_dashboard_gauge("Eficiencia", metrics["performance"]),
+            build_dashboard_gauge(
+                "Eficiencia operacional",
+                metrics["efficiency_operational"],
+                allow_above_100=True,
+            ),
             width="stretch",
             config={"displayModeBar": False},
+        )
+        st.caption(format_efficiency_coverage(efficiency_result))
+        efficiency_month_delta = format_efficiency_period_delta(
+            current_efficiency_result,
+            previous_efficiency_result,
+        )
+        st.caption(f"{comparison_prefix}{efficiency_month_delta}")
+        st.caption(
+            "Compara o tempo padrao necessario com o tempo real utilizado."
+        )
+        st.caption(
+            "Referencia historica: taxa media ponderada do melhor operador "
+            "em cada display, maquinario e processo."
         )
     with gauge_cols[2]:
         st.plotly_chart(
@@ -288,6 +361,76 @@ def render_production_dashboard(df: pd.DataFrame) -> None:
             st.caption(f"{progress_percent:.0f}% da meta atingida")
         else:
             st.info("Meta indisponivel (coluna quantidade_total vazia).")
+
+    if not efficiency_result.has_registered_standards:
+        st.info(
+            "Eficiencia operacional: N/A. Nenhum padrao produtivo foi cadastrado."
+        )
+    elif not efficiency_result.coverage_sufficient:
+        coverage_text = (
+            f"{efficiency_result.coverage_hours * 100:.1f}%".replace(".", ",")
+            if efficiency_result.coverage_hours is not None
+            else "0,0%"
+        )
+        st.warning(
+            "Eficiencia operacional: N/A. "
+            f"Cobertura insuficiente: {coverage_text} das horas possuem padrao."
+        )
+    elif efficiency_result.covered_records < efficiency_result.total_valid_records:
+        st.warning("Existem apontamentos sem padrao cadastrado.")
+
+    if efficiency_result.duplicate_standard_count > 0:
+        st.warning(
+            f"Foram encontradas {efficiency_result.duplicate_standard_count} "
+            "combinacoes com padrao duplicado."
+        )
+
+    if not efficiency_result.missing_report.empty:
+        with st.expander("Ver processos sem padrao de eficiencia"):
+            report = efficiency_result.missing_report.rename(
+                columns={
+                    "display": "Display",
+                    "maquinario": "Maquinario",
+                    "processo": "Processo",
+                    "motivo": "Motivo",
+                    "apontamentos_sem_padrao": "Apontamentos sem padrao",
+                    "horas_sem_padrao": "Horas sem padrao",
+                    "producao_sem_padrao": "Quantidade processada sem padrao",
+                }
+            )
+            st.dataframe(report, width="stretch", hide_index=True)
+
+    available_standards = standard_catalog[
+        standard_catalog["standard_rate_pph"].notna()
+    ].copy()
+    if not available_standards.empty:
+        with st.expander("Ver referencias de eficiencia por processo"):
+            def _catalog_label(*columns: str) -> pd.Series:
+                result = pd.Series(pd.NA, index=available_standards.index)
+                for column in columns:
+                    if column in available_standards.columns:
+                        result = result.fillna(available_standards[column])
+                return result
+
+            standards_view = pd.DataFrame(
+                {
+                    "Display": _catalog_label("display", "display_key"),
+                    "Maquinario": _catalog_label(
+                        "maquinario_nome", "maquinario", "maquinario_key"
+                    ),
+                    "Processo": _catalog_label(
+                        "processo_nome", "processo", "processo_key"
+                    ),
+                    "Operador referencia": _catalog_label("reference_operator"),
+                    "Pecas por hora padrao": available_standards[
+                        "standard_rate_pph"
+                    ].round(2),
+                    "Registros da referencia": _catalog_label("reference_records"),
+                    "Horas da referencia": _catalog_label("reference_hours"),
+                    "Origem": _catalog_label("standard_source"),
+                }
+            ).sort_values(["Display", "Maquinario", "Processo"])
+            st.dataframe(standards_view, width="stretch", hide_index=True)
 
     dashboard_df = df.copy()
     qtd_series = (

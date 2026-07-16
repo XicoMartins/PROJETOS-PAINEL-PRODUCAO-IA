@@ -12,8 +12,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from filters import FilterContext
-from services.metrics import compute_dashboard_metrics, resolve_last_update_metric
-from services.metrics import build_dashboard_gauge
+from services.metrics import (
+    build_dashboard_gauge,
+    compute_dashboard_metrics,
+    resolve_last_update_metric,
+)
+from services.operational_efficiency import OperationalEfficiencyResult
 
 
 class MetricsServiceTests(unittest.TestCase):
@@ -49,12 +53,10 @@ class MetricsServiceTests(unittest.TestCase):
         self.assertEqual(value, "24/04/2026")
 
     @patch("services.metrics.estimate_target_total")
-    @patch("services.metrics.estimate_ideal_rate")
     @patch("services.metrics.estimate_capacity_hours")
     def test_compute_dashboard_metrics_calculates_core_indicators(
         self,
         mock_capacity_hours,
-        mock_ideal_rate,
         mock_target_total,
     ) -> None:
         df = pd.DataFrame(
@@ -65,10 +67,15 @@ class MetricsServiceTests(unittest.TestCase):
             }
         )
         mock_capacity_hours.return_value = 20.0
-        mock_ideal_rate.return_value = 10.0
         mock_target_total.return_value = 200.0
+        efficiency = OperationalEfficiencyResult(
+            raw_efficiency=0.8,
+            oee_efficiency=0.8,
+            coverage_hours=1.0,
+            coverage_records=1.0,
+        )
 
-        metrics = compute_dashboard_metrics(df)
+        metrics = compute_dashboard_metrics(df, efficiency)
 
         self.assertAlmostEqual(metrics["produced"], 80.0)
         self.assertAlmostEqual(metrics["scrap"], 20.0)
@@ -83,12 +90,10 @@ class MetricsServiceTests(unittest.TestCase):
         self.assertAlmostEqual(metrics["target_total"], 200.0)
 
     @patch("services.metrics.estimate_target_total", return_value=100.0)
-    @patch("services.metrics.estimate_ideal_rate", return_value=10.0)
     @patch("services.metrics.estimate_capacity_hours", return_value=5.0)
     def test_availability_is_capped_at_one_and_does_not_inflate_oee(
         self,
         _mock_capacity_hours,
-        _mock_ideal_rate,
         _mock_target_total,
     ) -> None:
         df = pd.DataFrame(
@@ -99,7 +104,13 @@ class MetricsServiceTests(unittest.TestCase):
             }
         )
 
-        metrics = compute_dashboard_metrics(df)
+        efficiency = OperationalEfficiencyResult(
+            raw_efficiency=0.8,
+            oee_efficiency=0.8,
+            coverage_hours=1.0,
+            coverage_records=1.0,
+        )
+        metrics = compute_dashboard_metrics(df, efficiency)
 
         self.assertEqual(metrics["availability"], 1.0)
         self.assertAlmostEqual(metrics["performance"], 0.8)
@@ -111,6 +122,62 @@ class MetricsServiceTests(unittest.TestCase):
 
         self.assertEqual(figure.data[0]["mode"], "gauge")
         self.assertEqual(figure.layout.annotations[0]["text"], "N/A")
+
+    def test_efficiency_gauge_preserves_value_above_100_percent(self) -> None:
+        figure = build_dashboard_gauge(
+            "Eficiencia operacional", 1.084, allow_above_100=True
+        )
+
+        self.assertAlmostEqual(figure.data[0]["value"], 108.4)
+        self.assertGreater(figure.data[0]["gauge"]["axis"]["range"][1], 100)
+
+    def test_efficiency_above_one_is_only_capped_inside_oee(self) -> None:
+        df = pd.DataFrame(
+            {
+                "quantidade_produzida": [100],
+                "pecas_mortas": [0],
+                "duracao_horas": [1.0],
+            }
+        )
+        efficiency = OperationalEfficiencyResult(
+            raw_efficiency=1.5,
+            oee_efficiency=1.0,
+            coverage_hours=1.0,
+            coverage_records=1.0,
+        )
+
+        with (
+            patch("services.metrics.estimate_capacity_hours", return_value=1.0),
+            patch("services.metrics.estimate_target_total", return_value=100.0),
+        ):
+            metrics = compute_dashboard_metrics(df, efficiency)
+
+        self.assertEqual(metrics["efficiency_operational"], 1.5)
+        self.assertEqual(metrics["efficiency_oee"], 1.0)
+        self.assertEqual(metrics["oee"], 1.0)
+
+    def test_oee_is_na_when_operational_efficiency_is_unavailable(self) -> None:
+        df = pd.DataFrame(
+            {
+                "quantidade_produzida": [100],
+                "pecas_mortas": [0],
+                "duracao_horas": [1.0],
+            }
+        )
+        efficiency = OperationalEfficiencyResult(
+            raw_efficiency=None,
+            oee_efficiency=None,
+            coverage_hours=0.5,
+            coverage_records=0.5,
+        )
+
+        with (
+            patch("services.metrics.estimate_capacity_hours", return_value=1.0),
+            patch("services.metrics.estimate_target_total", return_value=100.0),
+        ):
+            metrics = compute_dashboard_metrics(df, efficiency)
+
+        self.assertIsNone(metrics["oee"])
 
 
 if __name__ == "__main__":

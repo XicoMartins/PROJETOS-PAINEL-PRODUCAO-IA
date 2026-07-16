@@ -417,7 +417,12 @@ def _normalize_loaded_frame(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     if start_time is not None and end_time is not None:
         start_sec = start_time.dt.hour * 3600 + start_time.dt.minute * 60 + start_time.dt.second
         end_sec = end_time.dt.hour * 3600 + end_time.dt.minute * 60 + end_time.dt.second
-        duracao_horas = (end_sec - start_sec) / 3600
+        duration_seconds = end_sec - start_sec
+        crosses_midnight = duration_seconds < 0
+        duration_seconds = duration_seconds.where(
+            ~crosses_midnight, duration_seconds + 24 * 3600
+        )
+        duracao_horas = duration_seconds / 3600
         df_raw["duracao_horas"] = pd.to_numeric(duracao_horas, errors="coerce")
 
     if "numero_display" in df_raw.columns:
