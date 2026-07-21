@@ -10,7 +10,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from services.process_forecast import WorkCalendar, generate_forecast
-from services.process_routing import RoutingTask, schedule_routing, topological_order
+from services.process_routing import (
+    RoutingTask,
+    collapse_missing_dependencies,
+    schedule_routing,
+    topological_order,
+)
 from services.process_forecast_repository import save_routing_forecast
 from tests.test_process_forecast import history
 
@@ -43,6 +48,24 @@ def task(
 
 
 class ProcessRoutingTests(unittest.TestCase):
+    def test_missing_process_is_bypassed_to_nearest_available_predecessor(self) -> None:
+        dependencies = {
+            "P01": (),
+            "P02": ("P01",),
+            "P03": ("P02",),
+            "P04": ("P03",),
+        }
+        effective = collapse_missing_dependencies(
+            dependencies, {"P01", "P03", "P04"}
+        )
+        self.assertEqual(effective["P03"], ("P01",))
+        self.assertEqual(effective["P04"], ("P03",))
+
+    def test_missing_initial_process_leaves_next_available_process_initial(self) -> None:
+        dependencies = {"P01": (), "P02": ("P01",)}
+        effective = collapse_missing_dependencies(dependencies, {"P02"})
+        self.assertEqual(effective["P02"], ())
+
     def test_routing_persistence_is_admin_only(self) -> None:
         with self.assertRaises(PermissionError):
             save_routing_forecast(

@@ -57,6 +57,41 @@ def topological_order(tasks: list[RoutingTask]) -> list[str]:
     return ordered
 
 
+def collapse_missing_dependencies(
+    dependencies: dict[str, tuple[str, ...]],
+    available_codes: set[str],
+) -> dict[str, tuple[str, ...]]:
+    """Substitui predecessores sem dados pelos ancestrais disponíveis mais próximos."""
+    memo: dict[str, tuple[str, ...]] = {}
+
+    def expand(code: str, path: set[str]) -> tuple[str, ...]:
+        if code in available_codes:
+            return (code,)
+        if code in path:
+            raise ValueError("Dependência cíclica envolvendo processo sem histórico.")
+        if code not in dependencies:
+            raise ValueError(f"Código de processo inexistente: {code}.")
+        if code in memo:
+            return memo[code]
+        expanded: list[str] = []
+        for predecessor in dependencies[code]:
+            for ancestor in expand(predecessor, path | {code}):
+                if ancestor not in expanded:
+                    expanded.append(ancestor)
+        memo[code] = tuple(expanded)
+        return memo[code]
+
+    result: dict[str, tuple[str, ...]] = {}
+    for code in available_codes:
+        expanded: list[str] = []
+        for predecessor in dependencies.get(code, ()):
+            for ancestor in expand(predecessor, {code}):
+                if ancestor != code and ancestor not in expanded:
+                    expanded.append(ancestor)
+        result[code] = tuple(expanded)
+    return result
+
+
 def _align_to_calendar(value: datetime, calendar: WorkCalendar) -> datetime:
     # Usa um intervalo desprezível para reaproveitar exatamente as regras do calendário.
     aligned = add_productive_hours(value, 1e-8, calendar)

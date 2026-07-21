@@ -121,6 +121,12 @@ agendador rejeita ciclos e impede que a soma das máquinas alocadas em atividade
 simultâneas ultrapasse a capacidade cadastrada. O cenário provável é apresentado
 também em gráfico temporal.
 
+Quando um ou mais processos não possuem nenhum lote válido, o sistema calcula um
+**roteiro parcial** com os processos que têm dados. Processos ausentes são
+omitidos e as dependências seguintes são reconectadas aos ancestrais disponíveis
+mais próximos. A tela e o histórico registram explicitamente que o prazo não
+representa 100% do roteiro e identificam os processos desconsiderados.
+
 ## Deploy no Streamlit Cloud
 
 1. Suba esta pasta em um repositorio GitHub.

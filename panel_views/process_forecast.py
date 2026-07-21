@@ -20,7 +20,11 @@ from services.process_forecast_repository import (
     save_forecast,
     save_routing_forecast,
 )
-from services.process_routing import RoutingTask, schedule_all_scenarios
+from services.process_routing import (
+    RoutingTask,
+    collapse_missing_dependencies,
+    schedule_all_scenarios,
+)
 from services.planilha_service import (
     find_planilha_for_display,
     load_planilha_processes,
@@ -397,12 +401,34 @@ def _render_routing_forecast(frame: pd.DataFrame, displays: list[str], *, userna
     insufficient = quality_frame[quality_frame["Confiança"] == "Sem histórico suficiente"]
     if not insufficient.empty:
         st.warning(
-            "Os processos com 1 lote já são aceitos com confiança baixa. "
-            "O roteiro completo ainda não pode ser calculado porque os processos "
-            "listados abaixo não possuem nenhum lote válido."
+            "PREVISÃO PARCIAL: alguns processos não possuem histórico e foram omitidos. "
+            "A data calculada considera somente os processos com dados disponíveis e não "
+            "representa 100% do roteiro produtivo."
         )
         st.dataframe(insufficient, hide_index=True, use_container_width=True)
+
+    if not tasks:
+        st.error("Nenhum processo do roteiro possui histórico suficiente para calcular a previsão.")
         return
+
+    available_codes = {task.code for task in tasks}
+    try:
+        effective_dependencies = collapse_missing_dependencies(dependencies, available_codes)
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+    tasks = [
+        RoutingTask(
+            code=task.code,
+            process=task.process,
+            machine=task.machine,
+            predecessors=effective_dependencies[task.code],
+            machine_units=task.machine_units,
+            required_quantity=task.required_quantity,
+            scenario_hours=task.scenario_hours,
+        )
+        for task in tasks
+    ]
 
     try:
         routing = schedule_all_scenarios(
@@ -425,7 +451,8 @@ def _render_routing_forecast(frame: pd.DataFrame, displays: list[str], *, userna
                 "Processos": len(scenario.schedule),
             }
         )
-    st.markdown("### Previsão do roteiro completo")
+    route_label = "parcial" if not insufficient.empty else "completo"
+    st.markdown(f"### Previsão do roteiro {route_label}")
     st.dataframe(pd.DataFrame(result_rows), hide_index=True, use_container_width=True)
 
     probable = routing["Provável"].schedule.copy()
@@ -464,6 +491,8 @@ def _render_routing_forecast(frame: pd.DataFrame, displays: list[str], *, userna
     if st.button("Salvar previsão do roteiro", type="primary"):
         routing_payload = {
             "confidence": "Por processo",
+            "complete_route": insufficient.empty,
+            "omitted_processes": insufficient["Código"].astype(str).tolist(),
             "valid_lots": {
                 str(row["Código"]): int(row["Lotes válidos"])
                 for _, row in quality_frame.iterrows()
@@ -505,6 +534,9 @@ def _render_routing_forecast(frame: pd.DataFrame, displays: list[str], *, userna
                     "quantity_per_product": float(row["Qtd./produto"]),
                     "execution": str(row["Execução"]),
                     "predecessors": list(dependencies[str(row["Código"])]),
+                    "effective_predecessors": list(
+                        effective_dependencies.get(str(row["Código"]), ())
+                    ),
                     "machine_units": int(row["Máquinas alocadas"]),
                 }
                 for _, row in route_editor.iterrows()
