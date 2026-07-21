@@ -18,13 +18,15 @@ from panel_views import (
     render_filtered_table,
     render_kpis,
     render_painting_shipments,
+    render_process_forecast,
     render_production_dashboard,
     render_tv_panel,
 )
 
-APP_VERSION = "13.2.0"
+APP_VERSION = "14.1.0"
 AUTH_SESSION_KEY = "auth_authenticated"
 AUTH_USER_KEY = "auth_user"
+AUTH_ROLE_KEY = "auth_role"
 
 
 def build_password_hash(password: str, salt: str | None = None, iterations: int = 260000) -> str:
@@ -80,6 +82,55 @@ def get_auth_users() -> dict[str, str]:
     return users
 
 
+def get_user_role(username: str) -> str:
+    """Resolve o perfil no servidor, sem confiar em dados do navegador."""
+    normalized_user = str(username or "").strip()
+    try:
+        auth_config = st.secrets.get("auth", {})
+        roles = auth_config.get("roles", {})
+        if hasattr(roles, "get"):
+            configured_role = str(roles.get(normalized_user, "")).strip().lower()
+            if configured_role:
+                return configured_role
+        admin_users = auth_config.get("admin_users", [])
+        if isinstance(admin_users, str):
+            admin_users = [item.strip() for item in admin_users.split(",")]
+        if normalized_user in {str(item).strip() for item in admin_users}:
+            return "admin"
+    except Exception:
+        pass
+    env_admins = {
+        item.strip() for item in os.getenv("AUTH_ADMIN_USERS", "").split(",") if item.strip()
+    }
+    if normalized_user in env_admins:
+        return "admin"
+    return "admin" if normalized_user.lower() == "admin" else "user"
+
+
+def is_admin_user() -> bool:
+    if not st.session_state.get(AUTH_SESSION_KEY):
+        return False
+    username = str(st.session_state.get(AUTH_USER_KEY, ""))
+    current_role = get_user_role(username)
+    st.session_state[AUTH_ROLE_KEY] = current_role
+    return current_role == "admin"
+
+
+def build_navigation_tabs(*, is_admin: bool) -> list[str]:
+    tabs = [
+        "Geral",
+        "Painel Display",
+        "Registros",
+        "Integridade",
+        "Painel TV",
+        "Remessas pintura",
+        "Painel de Produção",
+    ]
+    if is_admin:
+        tabs.append("PREVISÃO DE PROCESSO")
+    return tabs
+
+
 def render_login_screen(users: dict[str, str]) -> None:
     st.markdown('<div class="panel-card">', unsafe_allow_html=True)
     st.markdown("### Acesso restrito")
@@ -104,6 +155,7 @@ def render_login_screen(users: dict[str, str]) -> None:
         if stored_password and verify_password(password, stored_password):
             st.session_state[AUTH_SESSION_KEY] = True
             st.session_state[AUTH_USER_KEY] = username
+            st.session_state[AUTH_ROLE_KEY] = get_user_role(username)
             st.rerun()
         else:
             st.error("Usuario ou senha invalidos.")
@@ -125,6 +177,7 @@ def render_logout_control() -> None:
     if st.button("Sair"):
         st.session_state.pop(AUTH_SESSION_KEY, None)
         st.session_state.pop(AUTH_USER_KEY, None)
+        st.session_state.pop(AUTH_ROLE_KEY, None)
         st.rerun()
 
 
@@ -188,15 +241,7 @@ def main() -> None:
     data_sources = {
         "FORMS-MTECH (PostgreSQL)": "forms_postgres",
     }
-    nav_tabs = [
-        "Geral",
-        "Painel Display",
-        "Registros",
-        "Integridade",
-        "Painel TV",
-        "Remessas pintura",
-        "Painel de Produção",
-    ]
+    nav_tabs = build_navigation_tabs(is_admin=is_admin_user())
     if st.session_state.get("dashboard_sidebar_tab") == "Gráficos":
         st.session_state["dashboard_sidebar_tab"] = "Painel Display"
         st.session_state["display_panel_subtab"] = "Gráficos"
@@ -297,6 +342,16 @@ def main() -> None:
         render_production_dashboard(filtered, reference_df=df)
     elif selected_tab == "Remessas pintura":
         render_painting_shipments(filtered)
+    elif selected_tab == "PREVISÃO DE PROCESSO":
+        if not is_admin_user():
+            st.error("Acesso permitido somente para administradores.")
+            st.stop()
+        _render_section_title("PREVISÃO DE PROCESSO")
+        render_process_forecast(
+            df,
+            username=str(st.session_state.get(AUTH_USER_KEY, "")),
+            is_admin=True,
+        )
 
 
 if __name__ == "__main__":

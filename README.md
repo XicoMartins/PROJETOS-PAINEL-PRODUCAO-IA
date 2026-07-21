@@ -60,6 +60,66 @@ pcp = "pbkdf2_sha256$260000$..."
 producao = "pbkdf2_sha256$260000$..."
 ```
 
+Perfis podem ser definidos no mesmo Secret. A aba **PREVISÃO DE PROCESSO** é
+exclusiva do perfil `admin`:
+
+```toml
+[auth.roles]
+admin = "admin"
+pcp = "user"
+producao = "user"
+```
+
+Por compatibilidade com instalações anteriores, o usuário literalmente chamado
+`admin` recebe esse perfil mesmo sem `[auth.roles]`. Para outros nomes, configure
+o perfil explicitamente ou use `AUTH_ADMIN_USERS=usuario1,usuario2`.
+
+## Previsão de processo
+
+A previsão usa somente apontamentos com lote, quantidade positiva e duração
+positiva, sempre segmentados por display, processo e maquinário. Duplicidades por
+`id` são removidas e, com quatro ou mais lotes, taxas fora dos limites de Tukey
+(1,5 IQR) são excluídas.
+
+- **Provável:** `soma(quantidade) / soma(horas × operadores)` e ajuste pela
+  quantidade prevista de operadores.
+- **Otimista:** mediana dos 20% melhores lotes válidos, com mínimo de dois lotes.
+- **Conservador:** mediana dos 20% piores lotes válidos, com mínimo de dois lotes.
+
+Menos de dois lotes não gera previsão. A confiança é alta com 10 ou mais lotes,
+média com 5 a 9 e baixa com 2 a 4, podendo ser reduzida quando o coeficiente de
+variação ultrapassa 50% ou 80%. O término considera turno, horas produtivas,
+dias da semana e feriados informados; não soma horas corridas.
+
+O botão **Salvar previsão** cria, se necessário, a tabela PostgreSQL
+`process_forecasts` e registra usuário, escopo, entradas, parâmetros e resultados.
+O usuário do `DATABASE_URL` precisa de permissão para `CREATE TABLE` no primeiro
+uso e de `SELECT`/`INSERT` nos usos seguintes.
+
+Limitações da fonte atual: `production_entries` não possui cadastro de displays
+ativos/cancelados, status formal de conclusão, paradas, feriados, turno ou
+eficiência consolidada por lote. Por isso, conclusão é inferida por duração
+positiva; feriados/turno são parâmetros da simulação; e a tela não inventa nem
+exibe uma eficiência de lote inexistente.
+
+### Máquinas, dependências e paralelismo
+
+A tela possui dois modos:
+
+- **Processo individual:** produtividade estimada × operadores por máquina ×
+  máquinas disponíveis.
+- **Roteiro: paralelos e dependentes:** carrega os processos e quantidades por
+  produto da planilha do display e permite informar máquinas disponíveis por
+  maquinário, máquinas alocadas, predecessores e processos paralelos.
+
+A ordem da planilha é apenas uma sugestão inicial sequencial e deve ser revisada
+pelo administrador. Processos `Iniciais` começam sem predecessor; processos
+`Dependentes` aceitam um ou mais códigos separados por ponto e vírgula; processos
+`Paralelos` herdam os predecessores do processo usado como referência. O
+agendador rejeita ciclos e impede que a soma das máquinas alocadas em atividades
+simultâneas ultrapasse a capacidade cadastrada. O cenário provável é apresentado
+também em gráfico temporal.
+
 ## Deploy no Streamlit Cloud
 
 1. Suba esta pasta em um repositorio GitHub.

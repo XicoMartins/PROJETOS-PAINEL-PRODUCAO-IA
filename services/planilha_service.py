@@ -200,6 +200,7 @@ def load_planilha_processes(path_str: str, mtime: float | None) -> pd.DataFrame:
             selected_columns.append(optional_column)
 
     plan = df[selected_columns].copy()
+    plan["ordem_planilha"] = range(1, len(plan) + 1)
     plan["maquinario_nome"] = plan[maquinario_col].astype("string").str.strip()
     plan["processo_nome"] = plan[process_col].astype("string").str.strip()
     invalid_machine = plan["maquinario_nome"].str.lower().isin(
@@ -278,9 +279,10 @@ def load_planilha_processes(path_str: str, mtime: float | None) -> pd.DataFrame:
                 "standard_source": standard_source,
                 "standard_duplicate": duplicate_standard,
                 "has_standard_value": not valid_standards.empty,
+                "ordem_planilha": int(group["ordem_planilha"].min()),
             }
         )
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows).sort_values("ordem_planilha").reset_index(drop=True)
 
 
 def find_planilha_for_display(

@@ -7,6 +7,7 @@ from panel_views.charts import (
 from panel_views.dashboard import render_production_dashboard
 from panel_views.display_panel import render_display_panel, render_tv_panel
 from panel_views.painting_shipments import render_painting_shipments
+from panel_views.process_forecast import render_process_forecast
 
 __all__ = [
     "render_charts",
@@ -16,5 +17,6 @@ __all__ = [
     "render_kpis",
     "render_production_dashboard",
     "render_painting_shipments",
+    "render_process_forecast",
     "render_tv_panel",
 ]
