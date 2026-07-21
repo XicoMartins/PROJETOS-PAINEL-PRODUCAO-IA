@@ -8,7 +8,7 @@ from typing import Iterable
 import pandas as pd
 
 
-MINIMUM_LOTS = 2
+MINIMUM_LOTS = 1
 
 
 @dataclass(frozen=True)
@@ -281,13 +281,17 @@ def generate_forecast(
             coefficient_variation=None, standard_deviation=None,
             historical_productivity=None, base_comparison=None,
             exclusions=exclusions,
-            warnings=["São necessários pelo menos 2 lotes válidos e comparáveis."],
+            warnings=["É necessário pelo menos 1 lote válido e comparável."],
         )
 
     rates = lots["produtividade_por_operador"].astype(float)
     historical_per_operator = float(lots["quantidade_produzida"].sum() / lots["horas_operador"].sum())
-    standard_deviation = float(rates.std(ddof=1))
-    coefficient_variation = standard_deviation / historical_per_operator if historical_per_operator > 0 else None
+    standard_deviation = float(rates.std(ddof=1)) if len(rates) > 1 else 0.0
+    coefficient_variation = (
+        standard_deviation / historical_per_operator
+        if len(rates) > 1 and historical_per_operator > 0
+        else None
+    )
     tail = _tail_size(len(lots))
     ordered = rates.sort_values()
     per_operator_rates = {
@@ -309,6 +313,10 @@ def generate_forecast(
         )
 
     warnings = []
+    if len(lots) == 1:
+        warnings.append(
+            "Previsão baseada em apenas 1 lote: os três cenários são iguais e a confiança é baixa."
+        )
     if exclusions["outliers"]:
         warnings.append(f"{exclusions['outliers']} lote(s) fora dos limites de Tukey foram excluídos.")
     if coefficient_variation is not None and coefficient_variation > 0.5:

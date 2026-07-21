@@ -625,7 +625,8 @@ def render_process_forecast(df: pd.DataFrame, *, username: str, is_admin: bool) 
     with st.expander("Critérios, amostra e exclusões"):
         st.write(
             "Provável: soma produzida ÷ soma de horas-operador. Otimista e conservador: "
-            "mediana, respectivamente, dos 20% superiores e inferiores (mínimo de dois lotes). "
+            "mediana, respectivamente, dos 20% superiores e inferiores. Com apenas um lote, "
+            "os três cenários usam a mesma produtividade e têm baixa confiança. "
             "A taxa por operador é multiplicada pelos operadores previstos. Outliers: limites de "
             "Tukey (1,5 IQR), aplicados com quatro ou mais lotes."
         )

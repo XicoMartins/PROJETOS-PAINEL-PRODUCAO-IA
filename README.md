@@ -83,11 +83,12 @@ positiva, sempre segmentados por display, processo e maquinário. Duplicidades p
 
 - **Provável:** `soma(quantidade) / soma(horas × operadores)` e ajuste pela
   quantidade prevista de operadores.
-- **Otimista:** mediana dos 20% melhores lotes válidos, com mínimo de dois lotes.
-- **Conservador:** mediana dos 20% piores lotes válidos, com mínimo de dois lotes.
+- **Otimista:** mediana dos 20% melhores lotes válidos.
+- **Conservador:** mediana dos 20% piores lotes válidos.
 
-Menos de dois lotes não gera previsão. A confiança é alta com 10 ou mais lotes,
-média com 5 a 9 e baixa com 2 a 4, podendo ser reduzida quando o coeficiente de
+Um único lote já gera previsão, com os três cenários iguais e confiança baixa.
+A confiança é alta com 10 ou mais lotes, média com 5 a 9 e baixa com 1 a 4,
+podendo ser reduzida quando o coeficiente de
 variação ultrapassa 50% ou 80%. O término considera turno, horas produtivas,
 dias da semana e feriados informados; não soma horas corridas.
 

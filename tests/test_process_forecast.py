@@ -78,12 +78,19 @@ class ProcessForecastTests(unittest.TestCase):
         self.assertFalse(result.scenarios)
         self.assertEqual(result.confidence, "Sem histórico suficiente")
 
-    def test_one_lot_is_insufficient(self) -> None:
+    def test_one_lot_generates_equal_low_confidence_scenarios(self) -> None:
         result = generate_forecast(
             history([10]), planned_quantity=100, start_at=datetime(2026, 7, 20, 7),
             planned_operators=1, calendar=CALENDAR,
         )
-        self.assertFalse(result.scenarios)
+        self.assertEqual(result.confidence, "Baixa")
+        self.assertEqual(result.valid_lot_count, 1)
+        self.assertEqual(len(result.scenarios), 3)
+        productivities = {item.productivity for item in result.scenarios.values()}
+        finishes = {item.finish_at for item in result.scenarios.values()}
+        self.assertEqual(productivities, {10.0})
+        self.assertEqual(len(finishes), 1)
+        self.assertTrue(any("apenas 1 lote" in warning for warning in result.warnings))
 
     def test_sufficient_history_has_high_confidence(self) -> None:
         result = generate_forecast(
