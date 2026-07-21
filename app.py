@@ -23,7 +23,7 @@ from panel_views import (
     render_tv_panel,
 )
 
-APP_VERSION = "14.1.0"
+APP_VERSION = "14.1.1"
 AUTH_SESSION_KEY = "auth_authenticated"
 AUTH_USER_KEY = "auth_user"
 AUTH_ROLE_KEY = "auth_role"

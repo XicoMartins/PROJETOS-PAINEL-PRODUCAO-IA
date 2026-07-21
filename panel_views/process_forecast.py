@@ -397,9 +397,11 @@ def _render_routing_forecast(frame: pd.DataFrame, displays: list[str], *, userna
     insufficient = quality_frame[quality_frame["Confiança"] == "Sem histórico suficiente"]
     if not insufficient.empty:
         st.warning(
-            "Não foi possível calcular o roteiro completo: processos sem ao menos dois lotes válidos."
+            "Os processos com 1 lote já são aceitos com confiança baixa. "
+            "O roteiro completo ainda não pode ser calculado porque os processos "
+            "listados abaixo não possuem nenhum lote válido."
         )
-        st.dataframe(quality_frame, hide_index=True, use_container_width=True)
+        st.dataframe(insufficient, hide_index=True, use_container_width=True)
         return
 
     try:
