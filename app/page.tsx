@@ -1,5 +1,9 @@
 import type { CSSProperties } from "react";
-import { paintProjects, timelineDates, type PaintProject } from "./data/form-responses";
+import { AutoRefresh } from "./auto-refresh";
+import type { PaintProject } from "./data/form-responses";
+import { loadPaintingDashboardData } from "./data/painting-data";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Relatório Gerencial Consolidado — Pintura JDE",
@@ -57,7 +61,22 @@ function MetricCard({
   );
 }
 
-function Timeline({ projects }: { projects: PaintProject[] }) {
+function Timeline({
+  projects,
+  timelineDates,
+  source,
+  updatedLabel,
+}: {
+  projects: PaintProject[];
+  timelineDates: string[];
+  source: "live" | "demo";
+  updatedLabel: string;
+}) {
+  const timelineStyle = {
+    "--timeline-columns": timelineDates.length,
+    "--timeline-width": `${Math.max(900, timelineDates.length * 50)}px`,
+  } as CSSProperties;
+
   return (
     <section className="timeline-card" aria-labelledby="timeline-title">
       <div className="timeline-heading">
@@ -66,10 +85,10 @@ function Timeline({ projects }: { projects: PaintProject[] }) {
           <span><i className="legend-retorno" /> Retorno</span>
         </div>
         <h2 id="timeline-title">Linha do tempo — remessas e retornos por projeto</h2>
-        <span className="live-label"><i /> Base demonstrativa</span>
+        <span className={`live-label ${source}`}><i /> {updatedLabel}</span>
       </div>
 
-      <div className="timeline-scroll">
+      <div className="timeline-scroll" style={timelineStyle}>
         <div className="timeline-grid timeline-header">
           <strong className="project-heading">Projeto</strong>
           <div className="dates-row">
@@ -79,13 +98,13 @@ function Timeline({ projects }: { projects: PaintProject[] }) {
         </div>
 
         {projects.map((project, projectIndex) => {
-          const allEvents = [...project.remessas, ...project.retornos].sort(
+          const allEvents = [...project.remessas, ...project.retornos].filter((date) => timelineDates.includes(date)).sort(
             (a, b) => timelineDates.indexOf(a) - timelineDates.indexOf(b),
           );
           const first = allEvents[0];
           const last = allEvents[allEvents.length - 1];
-          const firstIndex = timelineDates.indexOf(first);
-          const lastIndex = timelineDates.indexOf(last);
+          const firstIndex = first ? timelineDates.indexOf(first) : 0;
+          const lastIndex = last ? timelineDates.indexOf(last) : firstIndex;
           const trackStyle = {
             "--track-start": `${((firstIndex + 0.5) / timelineDates.length) * 100}%`,
             "--track-width": `${((lastIndex - firstIndex) / timelineDates.length) * 100}%`,
@@ -119,23 +138,44 @@ function Timeline({ projects }: { projects: PaintProject[] }) {
   );
 }
 
-export default function Home() {
-  const returnedProjects = paintProjects.filter((project) => project.retornos.length > 0);
-  const concludedProjects = paintProjects.filter((project) => project.status === "Concluído");
-  const averageRemittanceDays = paintProjects.reduce((sum, project) => sum + project.remittanceDayCount, 0) / paintProjects.length;
-  const averageFirstReturn = returnedProjects.reduce((sum, project) => sum + (project.firstReturnDays ?? 0), 0) / returnedProjects.length;
-  const averageConclusion = returnedProjects.reduce((sum, project) => sum + (project.conclusionDays ?? 0), 0) / returnedProjects.length;
-  const noReturn = paintProjects.filter((project) => project.status === "Sem retorno");
-  const partial = paintProjects.find((project) => project.status === "Parcial");
-  const slowestFirstReturn = returnedProjects.reduce((slowest, project) =>
-    (project.firstReturnDays ?? 0) > (slowest.firstReturnDays ?? 0) ? project : slowest,
-  );
-  const longestCycle = concludedProjects.reduce((longest, project) =>
-    (project.conclusionDays ?? 0) > (longest.conclusionDays ?? 0) ? project : longest,
-  );
+export default async function Home() {
+  const dashboard = await loadPaintingDashboardData();
+  const projects = dashboard.projects;
+  const returnedProjects = projects.filter((project) => project.retornos.length > 0);
+  const concludedProjects = projects.filter((project) => project.status === "Concluído");
+  const averageRemittanceDays = projects.reduce((sum, project) => sum + project.remittanceDayCount, 0) / projects.length;
+  const averageFirstReturn = returnedProjects.length
+    ? returnedProjects.reduce((sum, project) => sum + (project.firstReturnDays ?? 0), 0) / returnedProjects.length
+    : 0;
+  const averageConclusion = returnedProjects.length
+    ? returnedProjects.reduce((sum, project) => sum + (project.conclusionDays ?? 0), 0) / returnedProjects.length
+    : 0;
+  const noReturn = projects.filter((project) => project.status === "Sem retorno");
+  const partial = projects.find((project) => project.status === "Parcial");
+  const slowestFirstReturn = returnedProjects.length
+    ? returnedProjects.reduce((slowest, project) =>
+      (project.firstReturnDays ?? 0) > (slowest.firstReturnDays ?? 0) ? project : slowest,
+    )
+    : null;
+  const longestCycle = concludedProjects.length
+    ? concludedProjects.reduce((longest, project) =>
+      (project.conclusionDays ?? 0) > (longest.conclusionDays ?? 0) ? project : longest,
+    )
+    : null;
+  const updatedAt = new Date(dashboard.updatedAt).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const baseLabel = dashboard.source === "live" ? "Formulário MTECH — Pintura" : "Controle Anísio 2026";
+  const updatedLabel = dashboard.source === "live" ? `Dados ao vivo · ${updatedAt}` : "Base demonstrativa";
 
   return (
     <main>
+      <AutoRefresh />
       <div className="report-shell">
         <header className="report-header">
           <div className="brand-mark" aria-label="MTECH Pintura">
@@ -144,12 +184,14 @@ export default function Home() {
           </div>
           <div className="title-block">
             <h1>Relatório gerencial consolidado — pintura JDE</h1>
-            <p>Controle de Remessas e Retornos por Projeto <i /> Base: Controle Anísio 2026</p>
+            <p>Controle de Remessas e Retornos por Projeto <i /> Base: {baseLabel}</p>
           </div>
         </header>
 
+        {dashboard.warning && <div className="data-warning" role="status">{dashboard.warning}</div>}
+
         <section className="metrics" aria-label="Indicadores principais">
-          <MetricCard icon="▣" label="projetos analisados" value={paintProjects.length} tone="navy" />
+          <MetricCard icon="▣" label="projetos analisados" value={projects.length} tone="navy" />
           <MetricCard icon="↺" label="projetos com retorno registrado" value={returnedProjects.length} tone="cyan" />
           <MetricCard icon="▦" label="Média de dias de remessa:" value={formatDecimal(averageRemittanceDays)} tone="green" />
           <MetricCard icon="◷" label="Média até 1º retorno*:" value={formatDecimal(averageFirstReturn)} suffix="dias" tone="blue" />
@@ -161,7 +203,12 @@ export default function Home() {
           </aside>
         </section>
 
-        <Timeline projects={paintProjects} />
+        <Timeline
+          projects={projects}
+          timelineDates={dashboard.timelineDates}
+          source={dashboard.source}
+          updatedLabel={updatedLabel}
+        />
 
         <section className="lower-grid">
           <div className="summary-table-card">
@@ -177,7 +224,7 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paintProjects.map((project, index) => (
+                  {projects.map((project, index) => (
                     <tr key={project.name}>
                       <td><span className="table-number">{index + 1}</span>{project.name}</td>
                       <td>{project.remittanceDayCount}</td>
@@ -196,13 +243,13 @@ export default function Home() {
               <div className="bulb" aria-hidden="true">♧</div>
               <h2 id="insights-title">Insights / alertas</h2>
             </div>
-            <div className="insight alert">
+            {noReturn.length > 0 && <div className="insight alert">
               <span aria-hidden="true">▲</span>
               <p><strong>Projetos sem retorno até a data-base:</strong><br />{noReturn.map((project) => project.name).join(" e ")}.</p>
-            </div>
+            </div>}
             {partial && <div className="insight warning"><span aria-hidden="true">◷</span><p><strong>Projeto com retorno parcial:</strong> {partial.name}.</p></div>}
-            <div className="insight calendar"><span aria-hidden="true">▦</span><p><strong>Maior prazo até o 1º retorno:</strong> {slowestFirstReturn.name}, com {slowestFirstReturn.firstReturnDays} dias.</p></div>
-            <div className="insight trend"><span aria-hidden="true">▥</span><p><strong>Maior ciclo de conclusão:</strong> {longestCycle.name}, com {longestCycle.conclusionDays} dias.</p></div>
+            {slowestFirstReturn && <div className="insight calendar"><span aria-hidden="true">▦</span><p><strong>Maior prazo até o 1º retorno:</strong> {slowestFirstReturn.name}, com {slowestFirstReturn.firstReturnDays} dias.</p></div>}
+            {longestCycle && <div className="insight trend"><span aria-hidden="true">▥</span><p><strong>Maior ciclo de conclusão:</strong> {longestCycle.name}, com {longestCycle.conclusionDays} dias.</p></div>}
           </aside>
         </section>
 
@@ -214,8 +261,11 @@ export default function Home() {
             <p><strong>Conclusão (dias)</strong> = dias corridos entre a 1ª remessa e o último retorno registrado.</p>
           </div>
           <div className="source-note">
-            <strong>Obs.:</strong> na aba JDE ARAMADO G LOR 322, um cabeçalho aparece como 22/09;
-            <span>para a leitura evolutiva consolidada foi considerado 22/07 por sequência lógica dos lançamentos.</span>
+            {dashboard.source === "live" ? (
+              <><strong>Fonte:</strong> Formulário MTECH — tabela painting_entries.<span>Atualização automática a cada 60 segundos.</span></>
+            ) : (
+              <><strong>Obs.:</strong> na aba JDE ARAMADO G LOR 322, um cabeçalho aparece como 22/09;<span>para a leitura evolutiva consolidada foi considerado 22/07 por sequência lógica dos lançamentos.</span></>
+            )}
           </div>
           <div className="paint-brush" aria-hidden="true"><i /><b /></div>
         </footer>
