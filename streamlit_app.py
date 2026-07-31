@@ -119,9 +119,23 @@ CSS = """
     display: inline-grid; place-items: center; flex: 0 0 21px; width: 21px; height: 21px;
     border-radius: 50%; background: var(--navy); color: white; margin-right: 8px; font-size: 10px;
   }
-  .mark-sent { width: 10px; height: 10px; background: var(--blue); box-shadow: 0 0 0 2px #d9ecfa; }
-  .mark-return { width: 11px; height: 11px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px #e3f5df; }
-  .mark-both { display: flex; gap: 3px; align-items: center; }
+  .event-line {
+    position: absolute; left: 0; right: 0; height: 2px; z-index: 1;
+    pointer-events: none;
+  }
+  .event-line.line-sent { top: calc(50% - 3px); background: #51a9dc; }
+  .event-line.line-return { top: calc(50% + 3px); background: #76c95a; }
+  .event-line.line-start { left: 50%; }
+  .event-line.line-end { right: 50%; }
+  .mark-sent {
+    position: relative; z-index: 3; width: 10px; height: 10px; background: var(--blue);
+    box-shadow: 0 0 0 2px #d9ecfa;
+  }
+  .mark-return {
+    position: relative; z-index: 3; width: 11px; height: 11px; border-radius: 50%;
+    background: var(--green); box-shadow: 0 0 0 2px #e3f5df;
+  }
+  .mark-both { position: relative; z-index: 3; display: flex; gap: 3px; align-items: center; }
   .status {
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
     border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 900;
@@ -429,6 +443,20 @@ def status_html(status: str) -> str:
     return '<span class="status status-none">× Sem retorno</span>'
 
 
+def connector_html(day: date, event_dates: list[date], movement: str) -> str:
+    if len(event_dates) < 2:
+        return ""
+    first, last = event_dates[0], event_dates[-1]
+    if day < first or day > last:
+        return ""
+    edge_class = ""
+    if day == first:
+        edge_class = " line-start"
+    elif day == last:
+        edge_class = " line-end"
+    return f'<i class="event-line line-{movement}{edge_class}"></i>'
+
+
 def render_header(report_year: int, updated_at: datetime) -> None:
     st.markdown(
         f"""
@@ -563,6 +591,10 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
         sent = set(project.sent_dates)
         returned = set(project.return_dates)
         for day in timeline:
+            connector = (
+                connector_html(day, project.sent_dates, "sent")
+                + connector_html(day, project.return_dates, "return")
+            )
             if day in sent and day in returned:
                 mark = '<span class="mark-both"><i class="mark-sent"></i><i class="mark-return"></i></span>'
             elif day in sent:
@@ -571,7 +603,7 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
                 mark = '<i class="mark-return"></i>'
             else:
                 mark = ""
-            timeline_cells.append(f'<div class="tl-cell">{mark}</div>')
+            timeline_cells.append(f'<div class="tl-cell">{connector}{mark}</div>')
         timeline_cells.append(f'<div class="tl-cell">{status_html(project.status)}</div>')
 
     summary_rows = []
