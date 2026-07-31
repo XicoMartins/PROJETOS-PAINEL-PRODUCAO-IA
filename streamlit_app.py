@@ -76,7 +76,7 @@ CSS = """
     background: var(--green); margin-right: 7px; box-shadow: 0 0 0 4px #d8f2dc;
   }
   .kpi-grid {
-    display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr));
+    display: grid; grid-template-columns: repeat(7, minmax(135px, 1fr));
     gap: 12px; margin: 12px 0 18px;
   }
   .kpi {
@@ -146,7 +146,8 @@ CSS = """
   .status-partial { background: #fff6e5; color: #bf7412; border: 1px solid #f3d79f; }
   .status-none { background: #ffeff1; color: #bd2e3b; border: 1px solid #f0bdc3; }
   .bottom-grid { display: grid; grid-template-columns: 1.13fr 1fr; gap: 12px; margin-top: 12px; }
-  .summary-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .summary-table-wrap { width: 100%; overflow-x: auto; }
+  .summary-table { width: 100%; min-width: 790px; border-collapse: collapse; font-size: 12px; }
   .summary-table th { background: var(--navy); color: white; padding: 8px 7px; text-align: center; }
   .summary-table th:first-child, .summary-table td:first-child { text-align: left; }
   .summary-table td { padding: 7px; border-bottom: 1px solid #e5ecf2; text-align: center; }
@@ -183,13 +184,22 @@ CSS = """
     background: #fff; border-left: 1px solid var(--line); border-right: 1px solid var(--line);
     padding: 5px 14px 10px; gap: 14px;
   }
-  [data-testid="stMultiSelect"] label, [data-testid="stDateInput"] label {
+  [data-testid="stSlider"], [data-testid="stToggle"], [data-testid="stDateInput"] {
+    background: #fff; border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+    padding: 2px 14px 10px;
+  }
+  [data-testid="stToggle"] { padding-top: 0; padding-bottom: 7px; }
+  [data-testid="stMultiSelect"] label, [data-testid="stDateInput"] label,
+  [data-testid="stSlider"] label, [data-testid="stToggle"] label {
     color: var(--ink); font-weight: 800;
   }
   .filter-summary {
     margin: -1px 0 10px; padding: 8px 15px; border: 1px solid var(--line);
     border-radius: 0 0 14px 14px; background: #f7fafc; color: var(--muted);
     font-size: 11px; font-weight: 700;
+  }
+  @media (max-width: 1220px) {
+    .kpi-grid { grid-template-columns: repeat(4, 1fr); }
   }
   @media (max-width: 980px) {
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -299,6 +309,18 @@ def number_value(value: object) -> float:
         return 0
 
 
+def iso_week_count(start_date: date, end_date: date) -> int:
+    """Count ISO weeks (Monday-Sunday) touched by an inclusive date range."""
+    first_monday = start_date - timedelta(days=start_date.weekday())
+    last_monday = end_date - timedelta(days=end_date.weekday())
+    return max(1, ((last_monday - first_monday).days // 7) + 1)
+
+
+def format_quantity(value: float) -> str:
+    formatted = f"{value:,.1f}"
+    return formatted.replace(",", "#").replace(".", ",").replace("#", ".")
+
+
 def database_url() -> str:
     try:
         return str(st.secrets["DATABASE_URL"]).strip()
@@ -402,7 +424,9 @@ def build_projects(
         return_dates = sorted({entry.occurred_on for entry in returned})
         sent_total = sum(entry.quantity for entry in sent)
         returned_total = sum(entry.quantity for entry in returned)
-        if not returned:
+        if returned and not sent:
+            status = "Parcial"
+        elif not returned:
             status = "Sem retorno"
         elif sent_total > 0 and returned_total < sent_total:
             status = "Parcial"
@@ -523,14 +547,40 @@ def smart_insights(projects: list[Project], timeline: list[date]) -> list[tuple[
 
     if partial:
         lowest_completion = partial[0]
+        if lowest_completion.sent_quantity <= 0:
+            partial_message = (
+                f"{lowest_completion.name} registrou retorno sem uma remessa no mesmo recorte; "
+                "consulte o histórico acumulado do projeto"
+            )
+        else:
+            partial_message = (
+                f"{lowest_completion.name} atingiu aproximadamente {lowest_completion.completion_rate:.1f}% "
+                "do volume enviado no período"
+            )
         insights.append(
             (
                 "◷",
                 "Retorno parcial mais crítico",
-                f"{lowest_completion.name} atingiu aproximadamente {lowest_completion.completion_rate:.1f}% "
-                "do volume enviado no período",
+                partial_message,
             )
         )
+
+    weeks_in_period = iso_week_count(timeline[0], timeline[-1])
+    sent_leader = max(projects, key=lambda project: project.sent_quantity)
+    return_leader = max(projects, key=lambda project: project.returned_quantity)
+    weekly_leaders: list[str] = []
+    if sent_leader.sent_quantity > 0:
+        weekly_leaders.append(
+            f"maior envio médio: {sent_leader.name}, com "
+            f"{format_quantity(sent_leader.sent_quantity / weeks_in_period)} peças/sem."
+        )
+    if return_leader.returned_quantity > 0:
+        weekly_leaders.append(
+            f"maior retorno médio: {return_leader.name}, com "
+            f"{format_quantity(return_leader.returned_quantity / weeks_in_period)} peças/sem."
+        )
+    if weekly_leaders:
+        insights.append(("⇅", "Ritmo semanal por projeto", "; ".join(weekly_leaders)))
 
     cycle_projects = [project for project in projects if project.conclusion_days is not None]
     if cycle_projects:
@@ -563,7 +613,10 @@ def smart_insights(projects: list[Project], timeline: list[date]) -> list[tuple[
 
 def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
     returned_projects = [project for project in projects if project.return_dates]
-    avg_sent = mean(project.sent_day_count for project in projects) if projects else 0
+    avg_sent_days = mean(project.sent_day_count for project in projects) if projects else 0
+    weeks_in_period = iso_week_count(timeline[0], timeline[-1])
+    avg_weekly_sent = mean(project.sent_quantity / weeks_in_period for project in projects) if projects else 0
+    avg_weekly_return = mean(project.returned_quantity / weeks_in_period for project in projects) if projects else 0
     first_return_values = [
         project.first_return_days for project in returned_projects if project.first_return_days is not None
     ]
@@ -575,7 +628,9 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
     kpis = [
         ("▣", len(projects), "projetos analisados"),
         ("↺", len(returned_projects), "projetos com retorno registrado"),
-        ("▦", f"{avg_sent:.1f}".replace(".", ","), "média de dias de remessa"),
+        ("▦", f"{avg_sent_days:.1f}".replace(".", ","), "média de dias de remessa"),
+        ("⇧", format_quantity(avg_weekly_sent), "envio médio por projeto/sem."),
+        ("⇩", format_quantity(avg_weekly_return), "retorno médio por projeto/sem."),
         ("◷", f"{avg_first:.1f}".replace(".", ","), "dias até o 1º retorno"),
         ("◷", f"{avg_conclusion:.1f}".replace(".", ","), "dias até a conclusão"),
     ]
@@ -617,9 +672,14 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
     for index, project in enumerate(projects, 1):
         first_return = "—" if project.first_return_days is None else f"{project.first_return_days} dias"
         conclusion = "não concluído" if project.conclusion_days is None else f"{project.conclusion_days} dias"
+        weekly_sent = format_quantity(project.sent_quantity / weeks_in_period)
+        weekly_return = format_quantity(project.returned_quantity / weeks_in_period)
         summary_rows.append(
             f"<tr><td class='summary-name'><span class='tl-index'>{index}</span>{safe(project.name)}</td>"
-            f"<td>{project.sent_day_count}</td><td>{first_return}</td><td>{conclusion}</td>"
+            f"<td>{project.sent_day_count}</td>"
+            f"<td title='Base: {weeks_in_period} semana(s) ISO'>{weekly_sent}</td>"
+            f"<td title='Base: {weeks_in_period} semana(s) ISO'>{weekly_return}</td>"
+            f"<td>{first_return}</td><td>{conclusion}</td>"
             f"<td>{status_html(project.status)}</td></tr>"
         )
 
@@ -646,10 +706,12 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
       </section>
       <div class="bottom-grid">
         <section class="panel">
-          <table class="summary-table">
-            <thead><tr><th>Projeto</th><th>Dias Rem.</th><th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>
-            <tbody>{''.join(summary_rows)}</tbody>
-          </table>
+          <div class="summary-table-wrap">
+            <table class="summary-table">
+              <thead><tr><th>Projeto</th><th>Dias Rem.</th><th>Env./sem.</th><th>Ret./sem.</th><th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>
+              <tbody>{''.join(summary_rows)}</tbody>
+            </table>
+          </div>
         </section>
         <aside class="panel insights">
           <h2>Insights / alertas <span class="ai-badge">IA ANALÍTICA</span></h2>
@@ -658,6 +720,9 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
       </div>
       <div class="footnote">
         <div><strong>Dias Rem.</strong> = quantidade de datas com remessa registrada.</div>
+        <div><strong>Env./sem.</strong> = quantidade líquida enviada ÷ semanas ISO do filtro.</div>
+        <div><strong>Ret./sem.</strong> = quantidade líquida retornada ÷ semanas ISO do filtro.</div>
+        <div><strong>Base semanal</strong> = projetos visíveis; cada semana ISO parcial conta como uma semana.</div>
         <div><strong>1º Ret.</strong> = dias corridos entre a primeira remessa e o primeiro retorno.</div>
         <div><strong>Conclusão</strong> = dias corridos entre a primeira remessa e o último retorno.</div>
       </div>
@@ -686,7 +751,7 @@ def dashboard_fragment() -> None:
             '<span>A seleção recalcula os indicadores, a tabela e a análise inteligente.</span></div>',
             unsafe_allow_html=True,
         )
-        project_column, period_column, count_column = st.columns([2.2, 1.25, 0.55])
+        project_column, count_column = st.columns([4.4, 0.6])
         with project_column:
             selected_projects = st.multiselect(
                 "Projetos lançados",
@@ -695,36 +760,60 @@ def dashboard_fragment() -> None:
                 key="painting_project_filter",
                 placeholder="Selecione um ou mais projetos",
             )
-        with period_column:
-            selected_period = st.date_input(
-                "Período analisado",
-                value=(max(all_timeline[0], all_timeline[-1] - timedelta(days=44)), all_timeline[-1]),
-                min_value=all_timeline[0],
-                max_value=all_timeline[-1],
-                format="DD/MM/YYYY",
-                key="painting_period_filter",
-            )
 
-        if isinstance(selected_period, (tuple, list)) and len(selected_period) == 2:
-            start_date, end_date = selected_period
-        elif isinstance(selected_period, (tuple, list)) and len(selected_period) == 1:
-            start_date = end_date = selected_period[0]
-        else:
-            start_date = end_date = selected_period
+        default_period = (
+            max(all_timeline[0], all_timeline[-1] - timedelta(days=44)),
+            all_timeline[-1],
+        )
+        selected_period = st.slider(
+            "Período analisado",
+            min_value=all_timeline[0],
+            max_value=all_timeline[-1],
+            value=default_period,
+            format="DD/MM/YYYY",
+            key="painting_period_slider",
+        )
+        start_date, end_date = selected_period
+
+        exact_day_enabled = st.toggle(
+            "Selecionar um dia exato",
+            key="painting_exact_day_enabled",
+            help="Quando ativado, o dia escolhido substitui temporariamente o intervalo linear.",
+        )
+        effective_start, effective_end = start_date, end_date
+        if exact_day_enabled:
+            exact_day_key = "painting_exact_day_filter"
+            stored_day = st.session_state.get(exact_day_key)
+            if isinstance(stored_day, datetime):
+                stored_day = stored_day.date()
+            if not isinstance(stored_day, date) or not start_date <= stored_day <= end_date:
+                st.session_state[exact_day_key] = end_date
+            exact_day = st.date_input(
+                "Dia exato",
+                min_value=start_date,
+                max_value=end_date,
+                format="DD/MM/YYYY",
+                key=exact_day_key,
+            )
+            effective_start = effective_end = exact_day
 
         project_data, timeline_dates = build_projects(
             raw_rows,
             selected_names=set(selected_projects),
-            start_date=start_date,
-            end_date=end_date,
+            start_date=effective_start,
+            end_date=effective_end,
         )
         with count_column:
             st.metric("Visíveis", len(project_data), help="Quantidade de projetos no recorte atual")
 
+        period_summary = (
+            f'dia exato de {effective_start.strftime("%d/%m/%Y")}'
+            if exact_day_enabled
+            else f'período de {effective_start.strftime("%d/%m/%Y")} a {effective_end.strftime("%d/%m/%Y")}'
+        )
         st.markdown(
             f'<div class="filter-summary">{len(project_data)} de {len(all_projects)} projetos · '
-            f'período de {start_date.strftime("%d/%m/%Y")} a {end_date.strftime("%d/%m/%Y")} · '
-            'reprocessamento automático</div>',
+            f'{period_summary} · reprocessamento automático</div>',
             unsafe_allow_html=True,
         )
         if not project_data:
