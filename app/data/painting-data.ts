@@ -158,7 +158,7 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
 
   const clientFilter = normalized(process.env.MTECH_PAINTING_CLIENT_FILTER ?? "JDE");
   const clientRows = clientFilter
-    ? parsed.filter((entry) => normalized(entry.cliente) === clientFilter)
+    ? parsed.filter((entry) => normalized(entry.cliente).includes(clientFilter))
     : parsed;
   if (!clientRows.length) return null;
 
