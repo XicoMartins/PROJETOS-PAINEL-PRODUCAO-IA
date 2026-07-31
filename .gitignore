@@ -51,9 +51,11 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
+*.tsbuildinfo
 /dist/
 /.wrangler/
 /outputs/
 /work/
+/Controle PINTURA Anisio 2026.xlsx
 /.tmp-ppt-reference/
 /.cache/

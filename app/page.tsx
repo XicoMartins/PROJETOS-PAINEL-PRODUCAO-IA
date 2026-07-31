@@ -6,7 +6,7 @@ import { loadPaintingDashboardData } from "./data/painting-data";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Relatório Gerencial Consolidado — Pintura JDE",
+  title: "Relatório Gerencial Consolidado — Pintura MTECH",
   description: "Controle de remessas e retornos por projeto da MTECH.",
 };
 
@@ -183,7 +183,7 @@ export default async function Home() {
             <span>▰</span>
           </div>
           <div className="title-block">
-            <h1>Relatório gerencial consolidado — pintura JDE</h1>
+            <h1>Relatório gerencial consolidado — pintura MTECH</h1>
             <p>Controle de Remessas e Retornos por Projeto <i /> Base: {baseLabel}</p>
           </div>
         </header>

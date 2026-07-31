@@ -32,6 +32,7 @@ type ParsedEntry = {
   quantity: number;
   cliente: string;
   display: string;
+  numeroDisplay: string;
   codigoPintura: string;
   color: string;
   updatedAt: Date;
@@ -87,22 +88,28 @@ function formatDateKey(date: Date) {
   return `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function movementFromProcess(process: string): Movement | null {
+function movementFromProcess(process: string, machinery: string): Movement | null {
   const key = normalized(process);
   if (key.includes("RETORNO")) return "retorno";
   if (key.includes("ENVIO") || key.includes("REMESSA")) return "remessa";
+  const machineryKey = normalized(machinery);
+  if (machineryKey.includes("RETORNO")) return "retorno";
+  if (machineryKey.includes("ENVIO") || machineryKey.includes("REMESSA")) return "remessa";
   return null;
 }
 
 function colorFromProcess(process: string) {
-  return process
+  const color = process
     .replace(/^.*?\b(?:ENVIO|REMESSA|RETORNO)\b\s*[-:–—]?\s*/i, "")
     .trim();
+  return color === process && process.includes(" - ")
+    ? process.split(" - ").at(-1)?.trim() || "SEM COR"
+    : color || "SEM COR";
 }
 
 function numberValue(value: number | string | null) {
   const parsed = Number(String(value ?? "0").replace(",", "."));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function uniqueParts(parts: string[]) {
@@ -134,7 +141,8 @@ function parseRows(rows: RawPaintingEntry[]) {
   return rows.flatMap<ParsedEntry>((row) => {
     const date = parseDate(row.data_producao);
     const process = cleanText(row.processo);
-    const movement = movementFromProcess(process);
+    if (normalized(process).startsWith("TINTA ")) return [];
+    const movement = movementFromProcess(process, cleanText(row.maquinario));
     if (!date || !movement) return [];
 
     const updatedAt = new Date(cleanText(row.timestamp) || cleanText(row.created_at) || date.toISOString());
@@ -145,6 +153,7 @@ function parseRows(rows: RawPaintingEntry[]) {
       quantity: numberValue(row.quantidade),
       cliente: cleanText(row.cliente),
       display: cleanText(row.display).replace(/\s*-\s*lote.*$/i, "").trim(),
+      numeroDisplay: cleanText(row.numero_display),
       codigoPintura: cleanText(row.codigo_pintura),
       color: colorFromProcess(process),
       updatedAt: Number.isNaN(updatedAt.valueOf()) ? date : updatedAt,
@@ -156,7 +165,7 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
   const parsed = parseRows(rows);
   if (!parsed.length) return null;
 
-  const clientFilter = normalized(process.env.MTECH_PAINTING_CLIENT_FILTER ?? "JDE");
+  const clientFilter = normalized(process.env.MTECH_PAINTING_CLIENT_FILTER ?? "");
   const clientRows = clientFilter
     ? parsed.filter((entry) => normalized(entry.cliente).includes(clientFilter))
     : parsed;
@@ -170,7 +179,7 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
 
   const grouped = new Map<string, ParsedEntry[]>();
   for (const entry of yearRows) {
-    const key = [entry.cliente, entry.display, entry.color, entry.codigoPintura].map(normalized).join("|");
+    const key = [entry.cliente, entry.display, entry.numeroDisplay, entry.color, entry.codigoPintura].map(normalized).join("|");
     const current = grouped.get(key) ?? [];
     current.push(entry);
     grouped.set(key, current);
@@ -257,9 +266,8 @@ export async function loadPaintingDashboardData(): Promise<PaintingDashboardData
         quantidade, quantidade_total, created_at
       FROM painting_entries
       ORDER BY timestamp DESC NULLS LAST, id DESC
-      LIMIT 5000
     `);
-    return buildDashboard(result.rows) ?? demoData("Nenhum lançamento JDE de pintura foi encontrado na fonte atual.");
+    return buildDashboard(result.rows) ?? demoData("Nenhum lançamento de pintura foi encontrado na fonte atual.");
   } catch (error) {
     console.error("Falha ao carregar painting_entries", error);
     return demoData("A fonte do formulário está temporariamente indisponível; os dados de referência foram mantidos.");

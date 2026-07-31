@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import math
 import os
 import re
 import unicodedata
@@ -14,7 +15,7 @@ import streamlit as st
 
 
 st.set_page_config(
-    page_title="Relatório Gerencial Consolidado — Pintura JDE",
+    page_title="Relatório Gerencial Consolidado — Pintura MTECH",
     page_icon="🎨",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -268,11 +269,16 @@ def parse_datetime(value: object, fallback: date) -> datetime:
         return datetime.combine(fallback, datetime.min.time())
 
 
-def movement_from_process(process: object) -> str | None:
+def movement_from_process(process: object, machinery: object = "") -> str | None:
     key = normalize(process)
     if "RETORNO" in key:
         return "retorno"
     if "ENVIO" in key or "REMESSA" in key:
+        return "remessa"
+    machinery_key = normalize(machinery)
+    if "RETORNO" in machinery_key:
+        return "retorno"
+    if "ENVIO" in machinery_key or "REMESSA" in machinery_key:
         return "remessa"
     return None
 
@@ -280,13 +286,15 @@ def movement_from_process(process: object) -> str | None:
 def color_from_process(process: object) -> str:
     text = str(process or "").strip()
     color = re.sub(r"^.*?\b(?:ENVIO|REMESSA|RETORNO)\b\s*[-:–—]?\s*", "", text, flags=re.I)
+    if color == text and " - " in text:
+        color = text.rsplit(" - ", maxsplit=1)[-1]
     return color.strip() or "SEM COR"
 
 
 def number_value(value: object) -> float:
     try:
         result = float(str(value or "0").replace(",", "."))
-        return result if result > 0 else 0
+        return result if math.isfinite(result) else 0
     except ValueError:
         return 0
 
@@ -307,10 +315,9 @@ def load_rows(db_url: str) -> list[dict]:
             cursor.execute(
                 """
                 SELECT id, timestamp, cliente, display, numero_display, codigo_pintura,
-                       processo, data_producao, quantidade, quantidade_total, created_at
+                       maquinario, processo, data_producao, quantidade, quantidade_total, created_at
                   FROM painting_entries
               ORDER BY timestamp DESC NULLS LAST, id DESC
-                 LIMIT 5000
                 """
             )
             return list(cursor.fetchall())
@@ -325,7 +332,7 @@ def project_name(entry: Entry) -> str:
 
 def build_projects(
     rows: list[dict],
-    client_filter: str = "JDE",
+    client_filter: str = "",
     selected_names: set[str] | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
@@ -336,8 +343,10 @@ def build_projects(
         cliente = str(row.get("cliente") or "").strip()
         if wanted and wanted not in normalize(cliente):
             continue
+        if normalize(row.get("processo")).startswith("TINTA "):
+            continue
         occurred_on = parse_date(row.get("data_producao"))
-        movement = movement_from_process(row.get("processo"))
+        movement = movement_from_process(row.get("processo"), row.get("maquinario"))
         if not occurred_on or not movement:
             continue
         parsed.append(
@@ -356,8 +365,6 @@ def build_projects(
     if not parsed:
         return [], []
 
-    report_year = max(entry.occurred_on.year for entry in parsed)
-    parsed = [entry for entry in parsed if entry.occurred_on.year == report_year]
     groups: dict[tuple[str, str, str, str, str], list[Entry]] = defaultdict(list)
     for entry in parsed:
         key = tuple(
@@ -372,7 +379,7 @@ def build_projects(
         )
         groups[key].append(entry)
 
-    selected = sorted(groups.values(), key=lambda items: max(item.occurred_on for item in items), reverse=True)[:20]
+    selected = sorted(groups.values(), key=lambda items: max(item.occurred_on for item in items), reverse=True)
     selected.sort(key=lambda items: min(item.occurred_on for item in items))
     projects: list[Project] = []
     visible_entries: list[Entry] = []
@@ -464,7 +471,7 @@ def render_header(report_year: int, updated_at: datetime) -> None:
           <header class="report-head">
             <div class="brand-mark">▰</div>
             <div>
-              <h1>Relatório gerencial consolidado — pintura JDE</h1>
+              <h1>Relatório gerencial consolidado — pintura MTECH</h1>
               <p>Controle de Remessas e Retornos por Projeto &nbsp;|&nbsp; Base: Formulário MTECH {report_year}</p>
             </div>
           </header>
@@ -666,7 +673,7 @@ def dashboard_fragment() -> None:
         all_projects, all_timeline = build_projects(raw_rows)
         if not all_projects:
             st.markdown(
-                '<div class="empty"><h3>Nenhum lançamento JDE encontrado</h3>'
+                '<div class="empty"><h3>Nenhum lançamento de pintura encontrado</h3>'
                 '<p>A conexão funcionou, mas não há movimentos de envio ou retorno para o filtro atual.</p></div>',
                 unsafe_allow_html=True,
             )
@@ -691,7 +698,7 @@ def dashboard_fragment() -> None:
         with period_column:
             selected_period = st.date_input(
                 "Período analisado",
-                value=(all_timeline[0], all_timeline[-1]),
+                value=(max(all_timeline[0], all_timeline[-1] - timedelta(days=44)), all_timeline[-1]),
                 min_value=all_timeline[0],
                 max_value=all_timeline[-1],
                 format="DD/MM/YYYY",
