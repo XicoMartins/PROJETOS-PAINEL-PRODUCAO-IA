@@ -7,11 +7,10 @@ import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from statistics import mean
+from statistics import mean, pstdev
 
 import psycopg
 import streamlit as st
-import streamlit.components.v1 as components
 
 
 st.set_page_config(
@@ -140,6 +139,10 @@ CSS = """
   .summary-name { font-weight: 700; color: var(--ink); }
   .insights { padding: 13px 16px; }
   .insights h2 { color: var(--teal); font-size: 17px; text-transform: uppercase; margin: 0 0 7px; }
+  .ai-badge {
+    display: inline-flex; margin-left: 7px; padding: 3px 7px; border-radius: 999px;
+    background: #ddf3f3; color: #087783; font-size: 9px; vertical-align: 2px;
+  }
   .insight { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px dotted #ccdbe5; font-size: 12px; }
   .insight:first-of-type { border-top: 0; }
   .insight-icon { font-size: 19px; line-height: 1; }
@@ -151,6 +154,27 @@ CSS = """
   .empty {
     padding: 32px; text-align: center; color: var(--muted); background: #fff;
     border: 1px solid var(--line); border-radius: 14px;
+  }
+  .filter-heading {
+    margin-top: 12px; padding: 12px 15px 4px; border: 1px solid var(--line);
+    border-bottom: 0; border-radius: 14px 14px 0 0; background: #fff;
+    color: var(--navy); font-size: 15px; font-weight: 900; text-transform: uppercase;
+  }
+  .filter-heading span {
+    display: block; margin-top: 3px; color: var(--muted); font-size: 11px;
+    font-weight: 600; text-transform: none;
+  }
+  [data-testid="stHorizontalBlock"] {
+    background: #fff; border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+    padding: 5px 14px 10px; gap: 14px;
+  }
+  [data-testid="stMultiSelect"] label, [data-testid="stDateInput"] label {
+    color: var(--ink); font-weight: 800;
+  }
+  .filter-summary {
+    margin: -1px 0 10px; padding: 8px 15px; border: 1px solid var(--line);
+    border-radius: 0 0 14px 14px; background: #f7fafc; color: var(--muted);
+    font-size: 11px; font-weight: 700;
   }
   @media (max-width: 980px) {
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -194,6 +218,11 @@ class Project:
     conclusion_days: int | None
     status: str
     updated_at: datetime
+    first_sent: date | None
+    last_activity: date
+    sent_quantity: float
+    returned_quantity: float
+    completion_rate: float
 
 
 def normalize(value: object) -> str:
@@ -273,7 +302,20 @@ def load_rows(db_url: str) -> list[dict]:
             return list(cursor.fetchall())
 
 
-def build_projects(rows: list[dict], client_filter: str = "JDE") -> tuple[list[Project], list[date]]:
+def project_name(entry: Entry) -> str:
+    client_label = re.sub(r"\s+COFFEE$", "", entry.cliente, flags=re.I)
+    display_label = re.sub(r"^DISPLAY\s+", "", entry.display, flags=re.I)
+    code_number = re.sub(r"^.*?-\s*", "", entry.codigo_pintura).lstrip("0") or entry.codigo_pintura
+    return " ".join(part for part in (client_label, display_label, entry.color, code_number) if part)
+
+
+def build_projects(
+    rows: list[dict],
+    client_filter: str = "JDE",
+    selected_names: set[str] | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> tuple[list[Project], list[date]]:
     parsed: list[Entry] = []
     wanted = normalize(client_filter)
     for row in rows:
@@ -319,7 +361,20 @@ def build_projects(rows: list[dict], client_filter: str = "JDE") -> tuple[list[P
     selected = sorted(groups.values(), key=lambda items: max(item.occurred_on for item in items), reverse=True)[:20]
     selected.sort(key=lambda items: min(item.occurred_on for item in items))
     projects: list[Project] = []
-    for entries in selected:
+    visible_entries: list[Entry] = []
+    for all_entries in selected:
+        name = project_name(all_entries[0])
+        if selected_names is not None and name not in selected_names:
+            continue
+        entries = [
+            entry
+            for entry in all_entries
+            if (start_date is None or entry.occurred_on >= start_date)
+            and (end_date is None or entry.occurred_on <= end_date)
+        ]
+        if not entries:
+            continue
+        visible_entries.extend(entries)
         sent = [entry for entry in entries if entry.movement == "remessa"]
         returned = [entry for entry in entries if entry.movement == "retorno"]
         sent_dates = sorted({entry.occurred_on for entry in sent})
@@ -332,14 +387,10 @@ def build_projects(rows: list[dict], client_filter: str = "JDE") -> tuple[list[P
             status = "Parcial"
         else:
             status = "Concluído"
-        reference = entries[0]
-        client_label = re.sub(r"\s+COFFEE$", "", reference.cliente, flags=re.I)
-        display_label = re.sub(r"^DISPLAY\s+", "", reference.display, flags=re.I)
-        code_number = re.sub(r"^.*?-\s*", "", reference.codigo_pintura).lstrip("0") or reference.codigo_pintura
-        name = " ".join(part for part in (client_label, display_label, reference.color, code_number) if part)
         first_sent = sent_dates[0] if sent_dates else None
         first_return = return_dates[0] if return_dates else None
         last_return = return_dates[-1] if return_dates else None
+        completion_rate = min(100.0, (returned_total / sent_total * 100)) if sent_total > 0 else 0
         projects.append(
             Project(
                 name=name,
@@ -350,13 +401,18 @@ def build_projects(rows: list[dict], client_filter: str = "JDE") -> tuple[list[P
                 conclusion_days=(last_return - first_sent).days if first_sent and last_return else None,
                 status=status,
                 updated_at=max(entry.updated_at for entry in entries),
+                first_sent=first_sent,
+                last_activity=max(entry.occurred_on for entry in entries),
+                sent_quantity=sent_total,
+                returned_quantity=returned_total,
+                completion_rate=completion_rate,
             )
         )
 
-    all_dates = [entry.occurred_on for entries in selected for entry in entries]
-    start, end = min(all_dates), max(all_dates)
-    if (end - start).days >= 45:
-        start = end - timedelta(days=44)
+    if not visible_entries:
+        return [], []
+    start = start_date or min(entry.occurred_on for entry in visible_entries)
+    end = end_date or max(entry.occurred_on for entry in visible_entries)
     timeline = [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
     return projects, timeline
 
@@ -373,6 +429,103 @@ def status_html(status: str) -> str:
     return '<span class="status status-none">× Sem retorno</span>'
 
 
+def render_header(report_year: int, updated_at: datetime) -> None:
+    st.markdown(
+        f"""
+        <div class="report-shell">
+          <header class="report-head">
+            <div class="brand-mark">▰</div>
+            <div>
+              <h1>Relatório gerencial consolidado — pintura JDE</h1>
+              <p>Controle de Remessas e Retornos por Projeto &nbsp;|&nbsp; Base: Formulário MTECH {report_year}</p>
+            </div>
+          </header>
+          <div class="live-strip">
+            <span><i class="live-dot"></i>Base ativa: painting_entries · atualização automática a cada 60 segundos</span>
+            <span>Último lançamento: {updated_at.strftime("%d/%m/%Y %H:%M")}</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def smart_insights(projects: list[Project], timeline: list[date]) -> list[tuple[str, str, str]]:
+    period_end = timeline[-1]
+    returned_projects = [project for project in projects if project.return_dates]
+    no_return = sorted(
+        (project for project in projects if project.status == "Sem retorno"),
+        key=lambda project: (period_end - (project.first_sent or project.last_activity)).days,
+        reverse=True,
+    )
+    partial = sorted(
+        (project for project in projects if project.status == "Parcial"),
+        key=lambda project: project.completion_rate,
+    )
+    return_rate = (len(returned_projects) / len(projects) * 100) if projects else 0
+
+    insights: list[tuple[str, str, str]] = [
+        (
+            "✦",
+            "Leitura inteligente do recorte",
+            f"{len(returned_projects)} de {len(projects)} projetos têm retorno no período "
+            f"({return_rate:.0f}% de cobertura)",
+        )
+    ]
+
+    if no_return:
+        highest_risk = no_return[0]
+        waiting_days = (period_end - (highest_risk.first_sent or highest_risk.last_activity)).days
+        insights.append(
+            (
+                "⚠",
+                "Prioridade de acompanhamento",
+                f"{highest_risk.name} está sem retorno no recorte há {waiting_days} dias",
+            )
+        )
+    else:
+        insights.append(("✓", "Risco de ausência de retorno", "nenhum projeto selecionado está sem retorno"))
+
+    if partial:
+        lowest_completion = partial[0]
+        insights.append(
+            (
+                "◷",
+                "Retorno parcial mais crítico",
+                f"{lowest_completion.name} atingiu aproximadamente {lowest_completion.completion_rate:.1f}% "
+                "do volume enviado no período",
+            )
+        )
+
+    cycle_projects = [project for project in projects if project.conclusion_days is not None]
+    if cycle_projects:
+        cycles = [project.conclusion_days for project in cycle_projects if project.conclusion_days is not None]
+        average_cycle = mean(cycles)
+        deviation = pstdev(cycles) if len(cycles) > 1 else 0
+        longest = max(cycle_projects, key=lambda project: project.conclusion_days or 0)
+        threshold = average_cycle + max(2, deviation)
+        title = "Prazo fora do padrão" if (longest.conclusion_days or 0) > threshold else "Maior ciclo do recorte"
+        insights.append(
+            (
+                "▥",
+                title,
+                f"{longest.name}, com {longest.conclusion_days} dias; média filtrada de {average_cycle:.1f} dias",
+            )
+        )
+
+    first_return_projects = [project for project in projects if project.first_return_days is not None]
+    if first_return_projects:
+        fastest = min(first_return_projects, key=lambda project: project.first_return_days or 0)
+        insights.append(
+            (
+                "↗",
+                "Melhor resposta no período",
+                f"{fastest.name} registrou o primeiro retorno em {fastest.first_return_days} dias",
+            )
+        )
+    return insights[:5]
+
+
 def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
     returned_projects = [project for project in projects if project.return_dates]
     avg_sent = mean(project.sent_day_count for project in projects) if projects else 0
@@ -384,9 +537,6 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
     ]
     avg_first = mean(first_return_values) if first_return_values else 0
     avg_conclusion = mean(conclusion_values) if conclusion_values else 0
-    updated_at = max(project.updated_at for project in projects)
-    report_year = timeline[-1].year
-
     kpis = [
         ("▣", len(projects), "projetos analisados"),
         ("↺", len(returned_projects), "projetos com retorno registrado"),
@@ -434,32 +584,7 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
             f"<td>{status_html(project.status)}</td></tr>"
         )
 
-    no_return = [project.name for project in projects if project.status == "Sem retorno"]
-    partial = [project.name for project in projects if project.status == "Parcial"]
-    longest_first = max(
-        (project for project in returned_projects if project.first_return_days is not None),
-        key=lambda project: project.first_return_days,
-        default=None,
-    )
-    longest_cycle = max(
-        (project for project in returned_projects if project.conclusion_days is not None),
-        key=lambda project: project.conclusion_days,
-        default=None,
-    )
-    insight_rows = [
-        ("⚠", "Projetos sem retorno até a data-base", ", ".join(no_return) or "Nenhum"),
-        ("◷", "Projetos com retorno parcial", ", ".join(partial) or "Nenhum"),
-        (
-            "▦",
-            "Maior prazo até o 1º retorno",
-            f"{longest_first.name}, com {longest_first.first_return_days} dias" if longest_first else "Sem dados",
-        ),
-        (
-            "▥",
-            "Maior ciclo de conclusão",
-            f"{longest_cycle.name}, com {longest_cycle.conclusion_days} dias" if longest_cycle else "Sem dados",
-        ),
-    ]
+    insight_rows = smart_insights(projects, timeline)
     insights_html = "".join(
         f'<div class="insight"><span class="insight-icon">{icon}</span>'
         f'<div><strong>{safe(title)}:</strong> {safe(text)}.</div></div>'
@@ -468,17 +593,6 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
 
     content = f"""
     <div class="report-shell">
-      <header class="report-head">
-        <div class="brand-mark">▰</div>
-        <div>
-          <h1>Relatório gerencial consolidado — pintura JDE</h1>
-          <p>Controle de Remessas e Retornos por Projeto &nbsp;|&nbsp; Base: Formulário MTECH {report_year}</p>
-        </div>
-      </header>
-      <div class="live-strip">
-        <span><i class="live-dot"></i>Base ativa: painting_entries · dados reais</span>
-        <span>Último lançamento: {updated_at.strftime("%d/%m/%Y %H:%M")}</span>
-      </div>
       <section class="kpi-grid">{kpi_html}</section>
       <section class="panel">
         <div class="panel-title">
@@ -499,7 +613,7 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
           </table>
         </section>
         <aside class="panel insights">
-          <h2>Insights / alertas</h2>
+          <h2>Insights / alertas <span class="ai-badge">IA ANALÍTICA</span></h2>
           {insights_html}
         </aside>
       </div>
@@ -513,26 +627,82 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
     st.markdown(content, unsafe_allow_html=True)
 
 
-def main() -> None:
-    st.markdown(CSS, unsafe_allow_html=True)
+@st.fragment(run_every="60s")
+def dashboard_fragment() -> None:
     try:
         raw_rows = load_rows(database_url())
-        project_data, timeline_dates = build_projects(raw_rows)
-        if not project_data:
+        all_projects, all_timeline = build_projects(raw_rows)
+        if not all_projects:
             st.markdown(
                 '<div class="empty"><h3>Nenhum lançamento JDE encontrado</h3>'
                 '<p>A conexão funcionou, mas não há movimentos de envio ou retorno para o filtro atual.</p></div>',
                 unsafe_allow_html=True,
             )
+            return
+
+        render_header(all_timeline[-1].year, max(project.updated_at for project in all_projects))
+        project_names = [project.name for project in all_projects]
+        st.markdown(
+            '<div class="filter-heading">Filtros da linha do tempo'
+            '<span>A seleção recalcula os indicadores, a tabela e a análise inteligente.</span></div>',
+            unsafe_allow_html=True,
+        )
+        project_column, period_column, count_column = st.columns([2.2, 1.25, 0.55])
+        with project_column:
+            selected_projects = st.multiselect(
+                "Projetos lançados",
+                options=project_names,
+                default=project_names,
+                key="painting_project_filter",
+                placeholder="Selecione um ou mais projetos",
+            )
+        with period_column:
+            selected_period = st.date_input(
+                "Período analisado",
+                value=(all_timeline[0], all_timeline[-1]),
+                min_value=all_timeline[0],
+                max_value=all_timeline[-1],
+                format="DD/MM/YYYY",
+                key="painting_period_filter",
+            )
+
+        if isinstance(selected_period, (tuple, list)) and len(selected_period) == 2:
+            start_date, end_date = selected_period
+        elif isinstance(selected_period, (tuple, list)) and len(selected_period) == 1:
+            start_date = end_date = selected_period[0]
         else:
-            render_dashboard(project_data, timeline_dates)
+            start_date = end_date = selected_period
+
+        project_data, timeline_dates = build_projects(
+            raw_rows,
+            selected_names=set(selected_projects),
+            start_date=start_date,
+            end_date=end_date,
+        )
+        with count_column:
+            st.metric("Visíveis", len(project_data), help="Quantidade de projetos no recorte atual")
+
+        st.markdown(
+            f'<div class="filter-summary">{len(project_data)} de {len(all_projects)} projetos · '
+            f'período de {start_date.strftime("%d/%m/%Y")} a {end_date.strftime("%d/%m/%Y")} · '
+            'reprocessamento automático</div>',
+            unsafe_allow_html=True,
+        )
+        if not project_data:
+            st.markdown(
+                '<div class="empty"><h3>Nenhum movimento encontrado para os filtros selecionados</h3>'
+                '<p>Escolha outro projeto ou amplie o período analisado.</p></div>',
+                unsafe_allow_html=True,
+            )
+            return
+        render_dashboard(project_data, timeline_dates)
     except Exception as exc:
         st.error(f"Não foi possível sincronizar o painel com o Formulário MTECH: {exc}")
 
-    components.html(
-        "<script>setTimeout(function(){window.parent.location.reload();}, 60000);</script>",
-        height=0,
-    )
+
+def main() -> None:
+    st.markdown(CSS, unsafe_allow_html=True)
+    dashboard_fragment()
 
 
 if __name__ == "__main__":
