@@ -567,7 +567,138 @@ def _weekly_projects(
     projects: Sequence[ProjectRow],
     timeline: Sequence[date],
 ) -> list[ProjectRow]:
-    """Garante valores semanais, usando …1361 tokens truncated…d_png(
+    """Garante valores semanais, usando os totais quando necessário."""
+
+    if timeline:
+        first_monday = timeline[0] - timedelta(days=timeline[0].weekday())
+        last_monday = timeline[-1] - timedelta(days=timeline[-1].weekday())
+        period_weeks = max(1, ((last_monday - first_monday).days // 7) + 1)
+    else:
+        period_weeks = 1.0
+    result: list[ProjectRow] = []
+    for project in projects:
+        sent_per_week = project.sent_per_week
+        return_per_week = project.return_per_week
+        if sent_per_week is None and project.sent_quantity is not None:
+            sent_per_week = project.sent_quantity / period_weeks
+        if return_per_week is None and project.returned_quantity is not None:
+            return_per_week = project.returned_quantity / period_weeks
+        # O relatório atual sempre possui as duas colunas, inclusive com zero.
+        result.append(
+            replace(
+                project,
+                sent_per_week=sent_per_week if sent_per_week is not None else 0.0,
+                return_per_week=return_per_week if return_per_week is not None else 0.0,
+            )
+        )
+    return result
+
+
+def _automatic_metrics(projects: Sequence[ProjectRow]) -> list[Metric]:
+    returned = [project for project in projects if project.return_dates]
+    first_returns = [
+        project.first_return_days
+        for project in projects
+        if project.first_return_days is not None
+    ]
+    conclusions = [
+        project.conclusion_days
+        for project in projects
+        if project.conclusion_days is not None
+    ]
+    return [
+        Metric(len(projects), "projetos analisados", tone="blue"),
+        Metric(len(returned), "projetos com retorno registrado", tone="teal"),
+        Metric(
+            _format_number(mean(project.sent_day_count for project in projects) if projects else 0),
+            "média de dias de remessa",
+            tone="green",
+        ),
+        Metric(
+            _format_number(mean(project.sent_per_week or 0 for project in projects) if projects else 0),
+            "envio médio por projeto/sem.",
+            tone="blue",
+        ),
+        Metric(
+            _format_number(mean(project.return_per_week or 0 for project in projects) if projects else 0),
+            "retorno médio por projeto/sem.",
+            tone="blue",
+        ),
+        Metric(
+            _format_number(mean(first_returns) if first_returns else 0),
+            "dias até o 1º retorno",
+            tone="blue",
+        ),
+        Metric(
+            _format_number(mean(conclusions) if conclusions else 0),
+            "dias até a conclusão",
+            tone="blue",
+        ),
+    ]
+
+
+def _day_text(value: int | None, *, incomplete: bool = False) -> str:
+    if value is None:
+        return "não concluído" if incomplete else "—"
+    return f"{value} dia" if value == 1 else f"{value} dias"
+
+
+def _timeline_values(projects: Sequence[ProjectRow], supplied: Sequence[DateLike]) -> list[date]:
+    values = {_date_value(item) for item in supplied}
+    timeline = sorted(value for value in values if value is not None)
+    if timeline:
+        return timeline
+    events = {
+        event
+        for project in projects
+        for event in (*project.sent_dates, *project.return_dates)
+    }
+    return sorted(events)
+
+
+def _fit_title_font(draw: ImageDraw.ImageDraw, text: str, max_width: int) -> ImageFont.ImageFont:
+    for size in range(39, 23, -1):
+        font = FONTS.get(size, True)
+        if _text_width(draw, text, font) <= max_width:
+            return font
+    return FONTS.get(23, True)
+
+
+def _insight_icon(draw: ImageDraw.ImageDraw, x: int, y: int, kind: str) -> None:
+    key = kind.casefold()
+    if key in {"warning", "alert", "risco"}:
+        color = P.red
+        draw.polygon([(x+11, y), (x+22, y+21), (x, y+21)], fill=color)
+        _draw_centered(draw, (x+5, y+4, x+17, y+18), "!", FONTS.get(13, True), "white")
+    elif key in {"success", "ok", "check"}:
+        draw.ellipse((x, y, x+22, y+22), outline=P.green, width=2)
+        draw.line((x+5, y+12, x+10, y+17, x+18, y+6), fill=P.green, width=2)
+    elif key in {"clock", "partial", "tempo"}:
+        draw.ellipse((x, y, x+22, y+22), outline=P.orange, width=2)
+        draw.line((x+11, y+11, x+11, y+4), fill=P.orange, width=2)
+        draw.line((x+11, y+11, x+17, y+14), fill=P.orange, width=2)
+    elif key in {"chart", "grafico", "trend"}:
+        for offset, height in ((0, 8), (6, 13), (12, 18), (18, 22)):
+            draw.rectangle((x+offset, y+22-height, x+offset+4, y+22), fill="#5A9B2E")
+        draw.line((x, y+15, x+8, y+10, x+14, y+12, x+22, y+2), fill="#5A9B2E", width=2)
+    else:
+        draw.ellipse((x, y, x+22, y+22), fill=P.teal)
+        _draw_centered(draw, (x, y, x+22, y+22), "i", FONTS.get(14, True), "white")
+
+
+def _draw_bulb_mark(draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
+    """Desenha a marca de lâmpada do quadro de insights."""
+
+    draw.ellipse((x, y, x + 42, y + 42), fill=P.teal)
+    draw.ellipse((x + 12, y + 8, x + 30, y + 27), outline="white", width=2)
+    draw.line((x + 16, y + 24, x + 18, y + 30, x + 24, y + 30, x + 27, y + 24), fill="white", width=2)
+    draw.line((x + 18, y + 33, x + 24, y + 33), fill="white", width=2)
+    draw.line((x + 21, y + 3, x + 21, y + 7), fill="white", width=2)
+    draw.line((x + 7, y + 12, x + 11, y + 15), fill="white", width=2)
+    draw.line((x + 31, y + 15, x + 35, y + 12), fill="white", width=2)
+
+
+def generate_dashboard_png(
     metrics: Mapping[str, Any] | Sequence[Any],
     projects: Sequence[Any],
     timeline_dates: Sequence[DateLike],
@@ -990,4 +1121,3 @@ __all__ = [
     "generate_dashboard_png",
     "save_dashboard_png",
 ]
-
