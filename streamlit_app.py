@@ -167,7 +167,10 @@ CSS = """
   .status-done { background: #edf8e8; color: #398029; border: 1px solid #cce9c2; }
   .status-partial { background: #fff6e5; color: #bf7412; border: 1px solid #f3d79f; }
   .status-none { background: #ffeff1; color: #bd2e3b; border: 1px solid #f0bdc3; }
-  .bottom-grid { display: grid; grid-template-columns: 1.08fr .92fr; gap: 10px; margin-top: 2px; }
+  .bottom-grid {
+    display: grid; grid-template-columns: 1.06fr .94fr; align-items: start;
+    gap: 10px; margin-top: 2px;
+  }
   .summary-table-wrap { width: 100%; overflow-x: auto; }
   .summary-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 10px; }
   .summary-table th { background: var(--navy); color: white; padding: 6px 5px; text-align: center; }
@@ -175,20 +178,47 @@ CSS = """
   .summary-table td { padding: 5px; border-bottom: 1px solid #e5ecf2; text-align: center; }
   .summary-table tbody tr:nth-child(even) { background: #f7fafc; }
   .summary-name { font-weight: 800; color: var(--ink); }
-  .insights { padding: 10px 13px; border-color: var(--teal); }
-  .insights-head { display: flex; align-items: center; gap: 10px; margin-bottom: 3px; }
+  .insights {
+    position: relative; align-self: start; height: fit-content; min-height: 0;
+    padding: 8px 14px 8px 82px; border: 1.5px solid var(--teal); border-radius: 9px;
+  }
+  .insights-head { display: flex; align-items: center; min-height: 30px; margin: 0; }
   .bulb-mark {
-    flex: 0 0 38px; width: 38px; height: 38px; display: grid; place-items: center;
-    border-radius: 50%; background: var(--teal); color: #fff; font-size: 21px; font-weight: 900;
+    position: absolute; left: 13px; top: 8px; width: 56px; height: 56px;
+    display: grid; place-items: center; border-radius: 50%; background: var(--teal);
   }
-  .insights h2 { color: var(--teal); font-size: 16px; text-transform: uppercase; margin: 0; }
-  .ai-badge {
-    display: inline-flex; margin-left: 7px; padding: 3px 7px; border-radius: 999px;
-    background: #ddf3f3; color: #087783; font-size: 9px; vertical-align: 2px;
+  .bulb-core {
+    position: relative; width: 20px; height: 24px; margin-top: -7px;
+    border: 2px solid #fff; border-radius: 50% 50% 43% 43%;
   }
-  .insight { display: flex; gap: 9px; align-items: flex-start; padding: 8px 0; border-top: 1px dotted #ccdbe5; font-size: 10px; line-height: 1.35; }
-  .insight:first-of-type { border-top: 0; }
-  .insight-icon { color: var(--teal); font-size: 17px; line-height: 1; }
+  .bulb-core::before {
+    content: ""; position: absolute; left: 4px; bottom: -8px; width: 8px; height: 6px;
+    border: 2px solid #fff; border-top: 0; border-radius: 0 0 3px 3px;
+  }
+  .bulb-core::after {
+    content: ""; position: absolute; left: 4px; bottom: -12px; width: 12px; height: 2px;
+    border-radius: 2px; background: #fff;
+  }
+  .insights h2 {
+    color: var(--teal); font-size: 17px; line-height: 1.1;
+    text-transform: uppercase; margin: 0; font-weight: 900;
+  }
+  .insight {
+    display: grid; grid-template-columns: 31px minmax(0, 1fr); gap: 7px;
+    align-items: center; min-height: 38px; padding: 5px 0;
+    border-top: 1px dotted #ccdbe5; font-size: 10.5px; line-height: 1.28;
+  }
+  .insights-head + .insight { border-top: 0; }
+  .insight-icon {
+    display: grid; width: 27px; height: 27px; place-items: center;
+    color: var(--teal); font-size: 21px; line-height: 1; font-weight: 900;
+  }
+  .insight-overview .insight-icon { color: var(--teal); }
+  .insight-critical .insight-icon { color: #d92f45; }
+  .insight-success .insight-icon, .insight-cycle .insight-icon,
+  .insight-response .insight-icon { color: #5a9b2f; }
+  .insight-partial .insight-icon { color: #e89a14; }
+  .insight-rhythm .insight-icon { color: #078b98; }
   .footnote {
     position: relative; margin-top: 9px; padding: 9px 130px 9px 52px; border-radius: 8px;
     background: #eaf4fc; color: #37516f; font-size: 9px; line-height: 1.35;
@@ -706,8 +736,18 @@ def render_dashboard(
         )
 
     insight_rows = smart_insights(projects, timeline)
+    insight_classes = {
+        "✦": "overview",
+        "⚠": "critical",
+        "✓": "success",
+        "◷": "partial",
+        "⇅": "rhythm",
+        "▥": "cycle",
+        "↗": "response",
+    }
     insights_html = "".join(
-        f'<div class="insight"><span class="insight-icon">{icon}</span>'
+        f'<div class="insight insight-{insight_classes.get(icon, "overview")}">'
+        f'<span class="insight-icon" aria-hidden="true">{icon}</span>'
         f'<div><strong>{safe(title)}:</strong> {safe(text)}.</div></div>'
         for icon, title, text in insight_rows
     )
@@ -737,7 +777,7 @@ def render_dashboard(
           </div>
         </section>
         <aside class="panel insights">
-          <div class="insights-head"><span class="bulb-mark">☼</span><h2>Insights / alertas <span class="ai-badge">IA ANALÍTICA</span></h2></div>
+          <div class="insights-head"><span class="bulb-mark" aria-hidden="true"><i class="bulb-core"></i></span><h2>Insights / alertas</h2></div>
           {insights_html}
         </aside>
       </div>

@@ -602,6 +602,7 @@ select {
 .lower-grid {
   display: grid;
   grid-template-columns: 1.06fr .94fr;
+  align-items: start;
   gap: 12px;
   margin-top: 9px;
 }
@@ -686,8 +687,11 @@ table .status-pill {
 }
 
 .insights-card {
+  position: relative;
+  align-self: start;
+  height: fit-content;
   min-width: 0;
-  padding: 5px 18px 6px;
+  padding: 7px 12px 7px 82px;
   background: #fff;
   border: 1.5px solid #3aa0ae;
   border-radius: 8px;
@@ -696,32 +700,33 @@ table .status-pill {
 .insights-title-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 48px;
+  min-height: 30px;
 }
 
 .insights-title-row h2 {
   margin: 0;
   color: #0a8798;
-  font-size: 17px;
+  font-size: 16px;
+  line-height: 1.1;
   font-weight: 820;
   text-transform: uppercase;
 }
 
 .bulb {
-  position: relative;
+  position: absolute;
+  left: 12px;
+  top: 8px;
   display: grid;
-  flex: 0 0 49px;
-  width: 49px;
-  height: 49px;
+  width: 56px;
+  height: 56px;
   place-items: center;
   background: #078a9b;
   border-radius: 50%;
 }
 
 .bulb::before {
-  width: 19px;
-  height: 24px;
+  width: 20px;
+  height: 25px;
   border: 2px solid #fff;
   border-bottom: 0;
   border-radius: 50% 50% 42% 42%;
@@ -730,9 +735,9 @@ table .status-pill {
 
 .bulb::after {
   position: absolute;
-  bottom: 9px;
-  width: 13px;
-  height: 5px;
+  bottom: 10px;
+  width: 14px;
+  height: 6px;
   border-top: 2px solid #fff;
   border-bottom: 2px solid #fff;
   content: "";
@@ -744,18 +749,23 @@ table .status-pill {
 
 .insight {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
-  min-height: 43px;
+  min-height: 36px;
+  padding-block: 3px;
   border-top: 1px dotted #cad7de;
+}
+
+.insights-title-row + .insight {
+  border-top: 0;
 }
 
 .insight > span {
   display: grid;
-  width: 29px;
-  height: 29px;
+  width: 27px;
+  height: 27px;
   place-items: center;
-  font-size: 23px;
+  font-size: 21px;
   font-weight: 800;
   text-align: center;
 }
@@ -764,7 +774,7 @@ table .status-pill {
   margin: 0;
   color: #18365d;
   font-size: 10px;
-  line-height: 1.35;
+  line-height: 1.28;
 }
 
 .insight.alert > span {
@@ -1003,7 +1013,7 @@ table .status-pill {
   }
 
   .insights-card {
-    padding-inline: 12px;
+    padding: 7px 10px 7px 76px;
   }
 
   .report-footer {
