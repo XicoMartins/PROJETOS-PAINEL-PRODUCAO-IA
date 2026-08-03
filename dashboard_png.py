@@ -689,13 +689,13 @@ def _insight_icon(draw: ImageDraw.ImageDraw, x: int, y: int, kind: str) -> None:
 def _draw_bulb_mark(draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
     """Desenha a marca de lâmpada do quadro de insights."""
 
-    draw.ellipse((x, y, x + 42, y + 42), fill=P.teal)
-    draw.ellipse((x + 12, y + 8, x + 30, y + 27), outline="white", width=2)
-    draw.line((x + 16, y + 24, x + 18, y + 30, x + 24, y + 30, x + 27, y + 24), fill="white", width=2)
-    draw.line((x + 18, y + 33, x + 24, y + 33), fill="white", width=2)
-    draw.line((x + 21, y + 3, x + 21, y + 7), fill="white", width=2)
-    draw.line((x + 7, y + 12, x + 11, y + 15), fill="white", width=2)
-    draw.line((x + 31, y + 15, x + 35, y + 12), fill="white", width=2)
+    draw.ellipse((x, y, x + 50, y + 50), fill=P.teal)
+    draw.ellipse((x + 14, y + 9, x + 36, y + 32), outline="white", width=2)
+    draw.line((x + 18, y + 29, x + 21, y + 36, x + 29, y + 36, x + 32, y + 29), fill="white", width=2)
+    draw.line((x + 21, y + 40, x + 29, y + 40), fill="white", width=2)
+    draw.line((x + 25, y + 3, x + 25, y + 8), fill="white", width=2)
+    draw.line((x + 8, y + 14, x + 13, y + 18), fill="white", width=2)
+    draw.line((x + 37, y + 18, x + 42, y + 14), fill="white", width=2)
 
 
 def generate_dashboard_png(
@@ -748,9 +748,11 @@ def generate_dashboard_png(
     table_header_h = 34
     table_row_h = 27
     table_h = table_header_h + max(1, len(normalized_projects)) * table_row_h + 4
-    insight_row_h = 51
-    insight_h = 54 + max(1, min(5, len(normalized_insights))) * insight_row_h + 8
-    bottom_h = max(205, table_h, insight_h)
+    insight_row_h = 39
+    insight_h = 50 + max(1, min(5, len(normalized_insights))) * insight_row_h + 6
+    table_panel_h = max(205, table_h)
+    insight_panel_h = max(185, insight_h)
+    bottom_h = max(table_panel_h, insight_panel_h)
     foot_h = 78
     total_h = margin + header_h + kpi_h + 12 + timeline_h + 13 + bottom_h + 13 + foot_h + margin
 
@@ -901,8 +903,8 @@ def generate_dashboard_png(
     bottom_top = timeline_box[3] + 13
     gap = 14
     left_w = int((width - 2 * margin - gap) * .53)
-    table_box = (margin, bottom_top, margin + left_w, bottom_top + bottom_h)
-    insight_box = (table_box[2] + gap, bottom_top, width - margin, bottom_top + bottom_h)
+    table_box = (margin, bottom_top, margin + left_w, bottom_top + table_panel_h)
+    insight_box = (table_box[2] + gap, bottom_top, width - margin, bottom_top + insight_panel_h)
     _panel(draw, table_box, radius=13, shadow=False)
     _panel(draw, insight_box, radius=13, shadow=False)
 
@@ -965,31 +967,28 @@ def generate_dashboard_png(
     if not normalized_projects:
         _draw_centered(draw, (table_box[0], header_bottom, table_box[2], header_bottom+table_row_h), "Nenhum dado no recorte", FONTS.get(10), P.muted)
 
-    _draw_bulb_mark(draw, insight_box[0] + 15, bottom_top + 6)
-    heading_x = insight_box[0] + 67
-    draw.text((heading_x, bottom_top+18), "INSIGHTS / ALERTAS", font=FONTS.get(18, True), fill=P.teal)
-    badge_x = heading_x + _text_width(draw, "INSIGHTS / ALERTAS", FONTS.get(18, True)) + 10
-    badge = (int(badge_x), bottom_top+19, int(badge_x)+76, bottom_top+39)
-    draw.rounded_rectangle(badge, radius=10, fill=P.pale_teal)
-    _draw_centered(draw, badge, "IA ANALÍTICA", FONTS.get(8, True), P.teal)
-    draw.line((insight_box[0]+16, bottom_top+51, insight_box[2]-16, bottom_top+51), fill=P.line)
+    _draw_bulb_mark(draw, insight_box[0] + 13, bottom_top + 8)
+    content_x = insight_box[0] + 78
+    draw.text((content_x, bottom_top+17), "INSIGHTS / ALERTAS", font=FONTS.get(18, True), fill=P.teal)
     shown_insights = normalized_insights[:5]
     if not shown_insights:
         shown_insights = [Insight("Sem alertas", "Nenhuma análise disponível para o recorte atual", "success")]
     for index, insight in enumerate(shown_insights):
-        top = bottom_top + 59 + index * insight_row_h
+        top = bottom_top + 51 + index * insight_row_h
         if index:
-            draw.line((insight_box[0]+16, top-6, insight_box[2]-16, top-6), fill=P.line)
-        _insight_icon(draw, insight_box[0]+19, top+4, insight.kind)
-        text_x = insight_box[0]+53
+            separator_y = top - 4
+            for dash_x in range(content_x, insight_box[2] - 16, 6):
+                draw.line((dash_x, separator_y, min(dash_x + 2, insight_box[2] - 16), separator_y), fill=P.line)
+        _insight_icon(draw, content_x, top+5, insight.kind)
+        text_x = content_x + 34
         text_w = insight_box[2]-text_x-18
         full = f"{insight.title}: {insight.text}".rstrip(": ")
         lines = _wrap(draw, full, FONTS.get(10, False), text_w, 3)
         for line_no, line in enumerate(lines):
-            draw.text((text_x, top + line_no*13), line, font=FONTS.get(10, False), fill=P.ink)
+            draw.text((text_x, top + 3 + line_no*13), line, font=FONTS.get(10, False), fill=P.ink)
 
     # Rodapé explicativo.
-    foot_top = insight_box[3] + 13
+    foot_top = bottom_top + bottom_h + 13
     foot_box = (margin, foot_top, width-margin, foot_top+foot_h)
     draw.rounded_rectangle(foot_box, radius=12, fill=P.pale_blue)
     info_circle = (margin+13, foot_top+14, margin+39, foot_top+40)
