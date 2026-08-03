@@ -13,6 +13,8 @@ from statistics import mean, pstdev
 import psycopg
 import streamlit as st
 
+from dashboard_png import build_dashboard_png
+
 
 st.set_page_config(
     page_title="Relatório Gerencial Consolidado — Pintura MTECH",
@@ -25,100 +27,120 @@ st.set_page_config(
 CSS = """
 <style>
   :root {
-    --navy: #092d68;
-    --blue: #0877c9;
-    --teal: #088797;
-    --green: #48b82f;
-    --orange: #f39b24;
-    --red: #e23b48;
-    --ink: #17345d;
-    --muted: #60728d;
-    --line: #dce7f0;
+    --navy: #082e69;
+    --blue: #0879c9;
+    --teal: #087f90;
+    --green: #48b62f;
+    --orange: #ef9b25;
+    --red: #df3947;
+    --ink: #17365f;
+    --muted: #5e718d;
+    --line: #d8e3ed;
     --soft: #f4f8fb;
   }
-  .stApp { background: #edf3f8; color: var(--ink); }
+  .stApp { background: #eaf1f6; color: var(--ink); font-family: Arial, Aptos, "Segoe UI", sans-serif; }
   [data-testid="stHeader"], [data-testid="stToolbar"], footer { display: none !important; }
-  .block-container {
-    max-width: 1540px;
-    padding: 18px 20px 32px;
-  }
+  .block-container { max-width: 1720px; padding: 10px 14px 26px; }
   .report-shell {
-    background: #fff;
-    border: 1px solid #d9e3ec;
-    border-radius: 18px;
-    box-shadow: 0 18px 55px rgba(12, 48, 88, .12);
-    padding: 20px;
+    background: #fff; border: 1px solid #cfdbe5; border-radius: 4px;
+    box-shadow: 0 9px 28px rgba(11, 46, 83, .10); padding: 13px 15px 12px;
   }
   .report-head {
-    display: flex; align-items: center; gap: 16px; margin-bottom: 16px;
+    display: grid; grid-template-columns: 78px minmax(0, 1fr) 245px;
+    align-items: center; gap: 13px; min-height: 78px; margin-bottom: 4px;
   }
-  .brand-mark {
-    width: 66px; height: 66px; display: grid; place-items: center;
-    border-radius: 16px; color: white; font-size: 34px;
-    background: linear-gradient(145deg, var(--navy), var(--blue));
-    box-shadow: 0 8px 20px rgba(9, 45, 104, .22);
+  .brand-mark { width: 70px; height: 66px; position: relative; color: var(--navy); }
+  .spray-cup {
+    position: absolute; left: 27px; top: 2px; width: 25px; height: 17px;
+    border-radius: 2px 2px 5px 5px; background: var(--navy); transform: rotate(7deg);
   }
+  .spray-cup::before {
+    content: ""; position: absolute; left: -3px; top: -5px; width: 31px; height: 5px;
+    border-radius: 2px; background: var(--navy);
+  }
+  .spray-body {
+    position: absolute; left: 18px; top: 25px; width: 41px; height: 18px;
+    border-radius: 4px 8px 5px 4px; background: var(--navy); transform: rotate(5deg);
+  }
+  .spray-body::before {
+    content: ""; position: absolute; left: -15px; top: 3px; width: 18px; height: 7px;
+    border-radius: 4px 1px 1px 4px; background: var(--navy);
+  }
+  .spray-handle {
+    position: absolute; left: 24px; top: 39px; width: 14px; height: 28px;
+    border-radius: 3px 3px 6px 6px; background: var(--navy); transform: skew(-13deg) rotate(5deg);
+  }
+  .spray-dots { position: absolute; left: 2px; top: 22px; font-size: 19px; letter-spacing: 1px; transform: rotate(-8deg); }
   .report-head h1 {
-    margin: 0; color: var(--navy); font-size: clamp(24px, 2.4vw, 40px);
-    line-height: 1.02; text-transform: uppercase; letter-spacing: -.6px;
+    margin: 0; color: var(--navy); font-size: clamp(27px, 2.35vw, 42px);
+    line-height: 1; text-transform: uppercase; letter-spacing: -.7px; font-weight: 900;
   }
-  .report-head p {
-    color: var(--teal); margin: 7px 0 0; font-size: 17px; font-weight: 700;
-  }
-  .live-strip {
-    display: flex; justify-content: space-between; gap: 14px; align-items: center;
-    background: #eef9f1; border: 1px solid #b9e3bf; color: #246a32;
-    border-radius: 12px; padding: 9px 13px; margin: 0 0 14px;
-    font-size: 13px; font-weight: 700;
-  }
+  .report-head p { color: var(--teal); margin: 6px 0 0; font-size: 17px; font-weight: 800; }
+  .source-line { margin-top: 5px; color: #59708b; font-size: 10px; font-weight: 700; }
   .live-dot {
-    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
-    background: var(--green); margin-right: 7px; box-shadow: 0 0 0 4px #d8f2dc;
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green); margin-right: 5px; box-shadow: 0 0 0 3px #dff3dc;
+  }
+  .method-note {
+    border-left: 1px solid #d7e3ec; padding-left: 13px; color: #415776;
+    font-size: 10px; line-height: 1.35; font-style: italic; font-weight: 700;
+  }
+  .method-note div + div { margin-top: 4px; }
+  .toolbar-help { margin: 1px 0 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
+  div[data-testid="stPopover"] > button,
+  div[data-testid="stDownloadButton"] > button {
+    min-height: 42px; border: 1px solid #bfcfdd; border-radius: 9px;
+    background: #fff; color: var(--navy); font-weight: 800; box-shadow: 0 3px 10px rgba(10, 50, 90, .06);
+  }
+  div[data-testid="stDownloadButton"] > button {
+    border-color: var(--navy); background: var(--navy); color: #fff;
+  }
+  div[data-testid="stPopover"] > button:hover { border-color: var(--blue); color: var(--blue); }
+  div[data-testid="stDownloadButton"] > button:hover { border-color: var(--blue); background: var(--blue); color: #fff; }
+  [data-testid="stMultiSelect"] label, [data-testid="stDateInput"] label,
+  [data-testid="stSlider"] label, [data-testid="stToggle"] label { color: var(--ink); font-weight: 800; }
+  .selection-note {
+    margin: 0 0 7px; padding: 6px 10px; border-radius: 7px; background: #f5f9fc;
+    color: var(--muted); font-size: 10px; font-weight: 700; text-align: center;
   }
   .kpi-grid {
-    display: grid; grid-template-columns: repeat(7, minmax(135px, 1fr));
-    gap: 12px; margin: 12px 0 18px;
+    display: grid; grid-template-columns: repeat(7, minmax(128px, 1fr));
+    gap: 10px; margin: 5px 0 9px;
   }
   .kpi {
-    min-height: 92px; background: linear-gradient(180deg, #fff, #f8fbfd);
-    border: 1px solid var(--line); border-radius: 14px; padding: 13px;
-    display: flex; align-items: center; gap: 12px;
-    box-shadow: 0 4px 12px rgba(10, 50, 90, .06);
+    min-height: 76px; background: linear-gradient(180deg, #fff, #f9fbfd);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+    display: flex; align-items: center; gap: 9px; box-shadow: 0 3px 9px rgba(10, 50, 90, .07);
   }
   .kpi-icon {
-    flex: 0 0 48px; width: 48px; height: 48px; border-radius: 13px;
-    display: grid; place-items: center; font-size: 24px; color: var(--navy);
-    background: #e6f1fb;
+    flex: 0 0 44px; width: 44px; height: 44px; border-radius: 10px;
+    display: grid; place-items: center; font-size: 23px; color: var(--navy); background: #e7f1fa;
   }
   .kpi:nth-child(2) .kpi-icon { background: #ddf3f3; color: var(--teal); }
   .kpi:nth-child(3) .kpi-icon { background: #edf8e8; color: #4d8c2b; }
-  .kpi strong { color: var(--navy); font-size: 31px; line-height: 1; }
-  .kpi p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.2; font-weight: 700; }
+  .kpi strong { color: var(--navy); font-size: 28px; line-height: 1; }
+  .kpi p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.12; font-weight: 800; }
   .panel {
-    background: #fff; border: 1px solid var(--line); border-radius: 14px;
-    overflow: hidden; margin-top: 12px;
+    background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-top: 8px;
   }
   .panel-title {
-    padding: 12px 15px; color: var(--navy); text-transform: uppercase;
-    text-align: center; font-size: 16px; font-weight: 900; letter-spacing: .2px;
-    border-bottom: 1px solid var(--line);
+    padding: 9px 13px; color: var(--navy); text-transform: uppercase;
+    text-align: center; font-size: 14px; font-weight: 900; letter-spacing: .15px; border-bottom: 1px solid var(--line);
   }
-  .legend { font-size: 12px; font-weight: 700; color: var(--muted); margin-left: 12px; }
+  .legend { font-size: 10px; font-weight: 800; color: var(--muted); margin-left: 10px; }
   .legend .sq { color: var(--blue); } .legend .dot { color: var(--green); }
-  .timeline-wrap { overflow-x: auto; padding: 9px 10px 13px; }
-  .timeline-grid {
-    display: grid; min-width: 980px; align-items: stretch; font-size: 11px;
-  }
+  .timeline-wrap { overflow-x: auto; padding: 6px 9px 8px; }
+  .timeline-grid { display: grid; min-width: 980px; align-items: stretch; font-size: 10px; }
   .tl-cell {
-    min-height: 38px; display: flex; align-items: center; justify-content: center;
+    min-height: 31px; display: flex; align-items: center; justify-content: center;
     border-bottom: 1px solid #edf2f6; border-right: 1px dotted #e4eaf0;
     position: relative;
   }
-  .tl-head { min-height: 32px; font-weight: 900; color: var(--navy); }
-  .tl-project { justify-content: flex-start; padding: 0 9px; font-weight: 700; font-size: 11px; }
+  .tl-head { min-height: 27px; font-weight: 900; color: var(--navy); }
+  .tl-project { justify-content: flex-start; padding: 0 8px; font-weight: 800; font-size: 10px; }
   .tl-index {
-    display: inline-grid; place-items: center; flex: 0 0 21px; width: 21px; height: 21px;
-    border-radius: 50%; background: var(--navy); color: white; margin-right: 8px; font-size: 10px;
+    display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px;
+    border-radius: 50%; background: var(--navy); color: white; margin-right: 7px; font-size: 9px;
   }
   .event-line {
     position: absolute; left: 0; right: 0; height: 2px; z-index: 1;
@@ -133,73 +155,67 @@ CSS = """
     box-shadow: 0 0 0 2px #d9ecfa;
   }
   .mark-return {
-    position: relative; z-index: 3; width: 11px; height: 11px; border-radius: 50%;
+    position: relative; z-index: 3; width: 10px; height: 10px; border-radius: 50%;
     background: var(--green); box-shadow: 0 0 0 2px #e3f5df;
   }
   .mark-both { position: relative; z-index: 3; display: flex; gap: 3px; align-items: center; }
   .status {
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-    border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 900;
+    border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 900;
     white-space: nowrap;
   }
   .status-done { background: #edf8e8; color: #398029; border: 1px solid #cce9c2; }
   .status-partial { background: #fff6e5; color: #bf7412; border: 1px solid #f3d79f; }
   .status-none { background: #ffeff1; color: #bd2e3b; border: 1px solid #f0bdc3; }
-  .bottom-grid { display: grid; grid-template-columns: 1.13fr 1fr; gap: 12px; margin-top: 12px; }
+  .bottom-grid { display: grid; grid-template-columns: 1.08fr .92fr; gap: 10px; margin-top: 2px; }
   .summary-table-wrap { width: 100%; overflow-x: auto; }
-  .summary-table { width: 100%; min-width: 790px; border-collapse: collapse; font-size: 12px; }
-  .summary-table th { background: var(--navy); color: white; padding: 8px 7px; text-align: center; }
+  .summary-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 10px; }
+  .summary-table th { background: var(--navy); color: white; padding: 6px 5px; text-align: center; }
   .summary-table th:first-child, .summary-table td:first-child { text-align: left; }
-  .summary-table td { padding: 7px; border-bottom: 1px solid #e5ecf2; text-align: center; }
+  .summary-table td { padding: 5px; border-bottom: 1px solid #e5ecf2; text-align: center; }
   .summary-table tbody tr:nth-child(even) { background: #f7fafc; }
-  .summary-name { font-weight: 700; color: var(--ink); }
-  .insights { padding: 13px 16px; }
-  .insights h2 { color: var(--teal); font-size: 17px; text-transform: uppercase; margin: 0 0 7px; }
+  .summary-name { font-weight: 800; color: var(--ink); }
+  .insights { padding: 10px 13px; border-color: var(--teal); }
+  .insights-head { display: flex; align-items: center; gap: 10px; margin-bottom: 3px; }
+  .bulb-mark {
+    flex: 0 0 38px; width: 38px; height: 38px; display: grid; place-items: center;
+    border-radius: 50%; background: var(--teal); color: #fff; font-size: 21px; font-weight: 900;
+  }
+  .insights h2 { color: var(--teal); font-size: 16px; text-transform: uppercase; margin: 0; }
   .ai-badge {
     display: inline-flex; margin-left: 7px; padding: 3px 7px; border-radius: 999px;
     background: #ddf3f3; color: #087783; font-size: 9px; vertical-align: 2px;
   }
-  .insight { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px dotted #ccdbe5; font-size: 12px; }
+  .insight { display: flex; gap: 9px; align-items: flex-start; padding: 8px 0; border-top: 1px dotted #ccdbe5; font-size: 10px; line-height: 1.35; }
   .insight:first-of-type { border-top: 0; }
-  .insight-icon { font-size: 19px; line-height: 1; }
+  .insight-icon { color: var(--teal); font-size: 17px; line-height: 1; }
   .footnote {
-    margin-top: 13px; padding: 12px 14px; border-radius: 12px;
-    background: #eef6fd; color: #37516f; font-size: 11px; line-height: 1.45;
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    position: relative; margin-top: 9px; padding: 9px 130px 9px 52px; border-radius: 8px;
+    background: #eaf4fc; color: #37516f; font-size: 9px; line-height: 1.35;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 14px; overflow: hidden;
+  }
+  .footnote::before {
+    content: "i"; position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%;
+    background: var(--navy); color: #fff; font-family: Georgia, serif; font-size: 17px; font-weight: 900;
+  }
+  .footer-brush {
+    position: absolute; right: 18px; bottom: 13px; width: 86px; height: 18px;
+    border-radius: 2px 10px 10px 2px; background: linear-gradient(90deg, #0c8f9e 0 40%, #0b4d82 40% 68%, #082e69 68%);
+    transform: rotate(-7deg); opacity: .96;
+  }
+  .footer-brush::before {
+    content: ""; position: absolute; left: -48px; top: 2px; width: 48px; height: 15px;
+    clip-path: polygon(0 34%,100% 0,100% 100%,0 68%); background: #0b8e9d;
   }
   .empty {
     padding: 32px; text-align: center; color: var(--muted); background: #fff;
     border: 1px solid var(--line); border-radius: 14px;
   }
-  .filter-heading {
-    margin-top: 12px; padding: 12px 15px 4px; border: 1px solid var(--line);
-    border-bottom: 0; border-radius: 14px 14px 0 0; background: #fff;
-    color: var(--navy); font-size: 15px; font-weight: 900; text-transform: uppercase;
-  }
-  .filter-heading span {
-    display: block; margin-top: 3px; color: var(--muted); font-size: 11px;
-    font-weight: 600; text-transform: none;
-  }
-  [data-testid="stHorizontalBlock"] {
-    background: #fff; border-left: 1px solid var(--line); border-right: 1px solid var(--line);
-    padding: 5px 14px 10px; gap: 14px;
-  }
-  [data-testid="stSlider"], [data-testid="stToggle"], [data-testid="stDateInput"] {
-    background: #fff; border-left: 1px solid var(--line); border-right: 1px solid var(--line);
-    padding: 2px 14px 10px;
-  }
-  [data-testid="stToggle"] { padding-top: 0; padding-bottom: 7px; }
-  [data-testid="stMultiSelect"] label, [data-testid="stDateInput"] label,
-  [data-testid="stSlider"] label, [data-testid="stToggle"] label {
-    color: var(--ink); font-weight: 800;
-  }
-  .filter-summary {
-    margin: -1px 0 10px; padding: 8px 15px; border: 1px solid var(--line);
-    border-radius: 0 0 14px 14px; background: #f7fafc; color: var(--muted);
-    font-size: 11px; font-weight: 700;
-  }
   @media (max-width: 1220px) {
     .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+    .report-head { grid-template-columns: 68px minmax(0, 1fr); }
+    .method-note { display: none; }
   }
   @media (max-width: 980px) {
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -207,14 +223,15 @@ CSS = """
     .footnote { grid-template-columns: 1fr; }
   }
   @media (max-width: 600px) {
-    .block-container { padding: 8px; }
-    .report-shell { padding: 12px; border-radius: 12px; }
-    .report-head { align-items: flex-start; }
-    .brand-mark { width: 48px; height: 48px; flex-basis: 48px; font-size: 25px; }
-    .report-head h1 { font-size: 22px; }
+    .block-container { padding: 7px; }
+    .report-shell { padding: 10px; }
+    .report-head { grid-template-columns: 50px minmax(0,1fr); align-items: start; }
+    .brand-mark { width: 48px; height: 52px; transform: scale(.72); transform-origin: top left; }
+    .report-head h1 { font-size: 21px; }
     .report-head p { font-size: 13px; }
     .kpi-grid { grid-template-columns: 1fr; }
-    .live-strip { align-items: flex-start; flex-direction: column; }
+    .footnote { padding-right: 12px; padding-left: 45px; }
+    .footer-brush { display: none; }
   }
 </style>
 """
@@ -488,25 +505,25 @@ def connector_html(day: date, event_dates: list[date], movement: str) -> str:
     return f'<i class="event-line line-{movement}{edge_class}"></i>'
 
 
-def render_header(report_year: int, updated_at: datetime) -> None:
-    st.markdown(
-        f"""
-        <div class="report-shell">
-          <header class="report-head">
-            <div class="brand-mark">▰</div>
-            <div>
-              <h1>Relatório gerencial consolidado — pintura MTECH</h1>
-              <p>Controle de Remessas e Retornos por Projeto &nbsp;|&nbsp; Base: Formulário MTECH {report_year}</p>
-            </div>
-          </header>
-          <div class="live-strip">
-            <span><i class="live-dot"></i>Base ativa: painting_entries · atualização automática a cada 60 segundos</span>
-            <span>Último lançamento: {updated_at.strftime("%d/%m/%Y %H:%M")}</span>
-          </div>
+def render_header(report_year: int, updated_at: datetime) -> str:
+    return f"""
+      <header class="report-head">
+        <div class="brand-mark" aria-hidden="true">
+          <i class="spray-cup"></i><i class="spray-body"></i><i class="spray-handle"></i>
+          <span class="spray-dots">···</span>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        <div>
+          <h1>Relatório gerencial consolidado — pintura MTECH</h1>
+          <p>Controle de Remessas e Retornos por Projeto &nbsp;|&nbsp; Base: Formulário MTECH {report_year}</p>
+          <div class="source-line"><i class="live-dot"></i>Base sincronizada automaticamente · último lançamento: {updated_at.strftime("%d/%m/%Y %H:%M")}</div>
+        </div>
+        <aside class="method-note">
+          <div>*Da 1ª remessa até o 1º retorno registrado</div>
+          <div>**Da 1ª remessa até o último retorno registrado</div>
+          <div>Médias calculadas apenas para projetos com retorno registrado</div>
+        </aside>
+      </header>
+    """
 
 
 def smart_insights(projects: list[Project], timeline: list[date]) -> list[tuple[str, str, str]]:
@@ -611,7 +628,12 @@ def smart_insights(projects: list[Project], timeline: list[date]) -> list[tuple[
     return insights[:5]
 
 
-def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
+def render_dashboard(
+    projects: list[Project],
+    timeline: list[date],
+    report_year: int,
+    updated_at: datetime,
+) -> None:
     returned_projects = [project for project in projects if project.return_dates]
     avg_sent_days = mean(project.sent_day_count for project in projects) if projects else 0
     weeks_in_period = iso_week_count(timeline[0], timeline[-1])
@@ -640,7 +662,7 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
         for icon, value, label in kpis
     )
 
-    columns = f"minmax(250px,1.8fr) repeat({len(timeline)}, minmax(40px,1fr)) 116px"
+    columns = f"minmax(245px,1.8fr) repeat({len(timeline)}, minmax(36px,1fr)) 108px"
     timeline_cells = [
         '<div class="tl-cell tl-head tl-project">Projeto</div>',
         *[f'<div class="tl-cell tl-head">{day.strftime("%d/%m")}</div>' for day in timeline],
@@ -691,7 +713,8 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
     )
 
     content = f"""
-    <div class="report-shell">
+    <div class="report-shell report-canvas" id="painel-pintura-exportavel">
+      {render_header(report_year, updated_at)}
       <section class="kpi-grid">{kpi_html}</section>
       <section class="panel">
         <div class="panel-title">
@@ -714,7 +737,7 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
           </div>
         </section>
         <aside class="panel insights">
-          <h2>Insights / alertas <span class="ai-badge">IA ANALÍTICA</span></h2>
+          <div class="insights-head"><span class="bulb-mark">☼</span><h2>Insights / alertas <span class="ai-badge">IA ANALÍTICA</span></h2></div>
           {insights_html}
         </aside>
       </div>
@@ -725,6 +748,7 @@ def render_dashboard(projects: list[Project], timeline: list[date]) -> None:
         <div><strong>Base semanal</strong> = projetos visíveis; cada semana ISO parcial conta como uma semana.</div>
         <div><strong>1º Ret.</strong> = dias corridos entre a primeira remessa e o primeiro retorno.</div>
         <div><strong>Conclusão</strong> = dias corridos entre a primeira remessa e o último retorno.</div>
+        <i class="footer-brush" aria-hidden="true"></i>
       </div>
     </div>
     """
@@ -744,58 +768,54 @@ def dashboard_fragment() -> None:
             )
             return
 
-        render_header(all_timeline[-1].year, max(project.updated_at for project in all_projects))
         project_names = [project.name for project in all_projects]
-        st.markdown(
-            '<div class="filter-heading">Filtros da linha do tempo'
-            '<span>A seleção recalcula os indicadores, a tabela e a análise inteligente.</span></div>',
-            unsafe_allow_html=True,
-        )
-        project_column, count_column = st.columns([4.4, 0.6])
-        with project_column:
-            selected_projects = st.multiselect(
-                "Projetos lançados",
-                options=project_names,
-                default=project_names,
-                key="painting_project_filter",
-                placeholder="Selecione um ou mais projetos",
-            )
-
         default_period = (
             max(all_timeline[0], all_timeline[-1] - timedelta(days=44)),
             all_timeline[-1],
         )
-        selected_period = st.slider(
-            "Período analisado",
-            min_value=all_timeline[0],
-            max_value=all_timeline[-1],
-            value=default_period,
-            format="DD/MM/YYYY",
-            key="painting_period_slider",
-        )
-        start_date, end_date = selected_period
+        filter_column, download_column = st.columns([2.7, 1])
+        with filter_column:
+            st.markdown('<div class="toolbar-help">CONTROLES DO RELATÓRIO</div>', unsafe_allow_html=True)
+            with st.popover("⚙ Filtros de projetos e período", use_container_width=True):
+                st.caption("A seleção recalcula os indicadores, a tabela, os alertas e a imagem para download.")
+                selected_projects = st.multiselect(
+                    "Projetos lançados",
+                    options=project_names,
+                    default=project_names,
+                    key="painting_project_filter",
+                    placeholder="Selecione um ou mais projetos",
+                )
+                selected_period = st.slider(
+                    "Período analisado",
+                    min_value=all_timeline[0],
+                    max_value=all_timeline[-1],
+                    value=default_period,
+                    format="DD/MM/YYYY",
+                    key="painting_period_slider",
+                )
+                start_date, end_date = selected_period
 
-        exact_day_enabled = st.toggle(
-            "Selecionar um dia exato",
-            key="painting_exact_day_enabled",
-            help="Quando ativado, o dia escolhido substitui temporariamente o intervalo linear.",
-        )
-        effective_start, effective_end = start_date, end_date
-        if exact_day_enabled:
-            exact_day_key = "painting_exact_day_filter"
-            stored_day = st.session_state.get(exact_day_key)
-            if isinstance(stored_day, datetime):
-                stored_day = stored_day.date()
-            if not isinstance(stored_day, date) or not start_date <= stored_day <= end_date:
-                st.session_state[exact_day_key] = end_date
-            exact_day = st.date_input(
-                "Dia exato",
-                min_value=start_date,
-                max_value=end_date,
-                format="DD/MM/YYYY",
-                key=exact_day_key,
-            )
-            effective_start = effective_end = exact_day
+                exact_day_enabled = st.toggle(
+                    "Selecionar um dia exato",
+                    key="painting_exact_day_enabled",
+                    help="Quando ativado, o dia escolhido substitui temporariamente o intervalo linear.",
+                )
+                effective_start, effective_end = start_date, end_date
+                if exact_day_enabled:
+                    exact_day_key = "painting_exact_day_filter"
+                    stored_day = st.session_state.get(exact_day_key)
+                    if isinstance(stored_day, datetime):
+                        stored_day = stored_day.date()
+                    if not isinstance(stored_day, date) or not start_date <= stored_day <= end_date:
+                        st.session_state[exact_day_key] = end_date
+                    exact_day = st.date_input(
+                        "Dia exato",
+                        min_value=start_date,
+                        max_value=end_date,
+                        format="DD/MM/YYYY",
+                        key=exact_day_key,
+                    )
+                    effective_start = effective_end = exact_day
 
         project_data, timeline_dates = build_projects(
             raw_rows,
@@ -803,27 +823,56 @@ def dashboard_fragment() -> None:
             start_date=effective_start,
             end_date=effective_end,
         )
-        with count_column:
-            st.metric("Visíveis", len(project_data), help="Quantidade de projetos no recorte atual")
-
         period_summary = (
             f'dia exato de {effective_start.strftime("%d/%m/%Y")}'
             if exact_day_enabled
             else f'período de {effective_start.strftime("%d/%m/%Y")} a {effective_end.strftime("%d/%m/%Y")}'
         )
-        st.markdown(
-            f'<div class="filter-summary">{len(project_data)} de {len(all_projects)} projetos · '
-            f'{period_summary} · reprocessamento automático</div>',
-            unsafe_allow_html=True,
-        )
         if not project_data:
+            with download_column:
+                st.markdown('<div class="toolbar-help">EXPORTAÇÃO</div>', unsafe_allow_html=True)
+                st.button("📷 Baixar foto do painel", disabled=True, use_container_width=True)
             st.markdown(
                 '<div class="empty"><h3>Nenhum movimento encontrado para os filtros selecionados</h3>'
                 '<p>Escolha outro projeto ou amplie o período analisado.</p></div>',
                 unsafe_allow_html=True,
             )
             return
-        render_dashboard(project_data, timeline_dates)
+        report_updated_at = max(project.updated_at for project in all_projects)
+        with download_column:
+            st.markdown('<div class="toolbar-help">EXPORTAÇÃO</div>', unsafe_allow_html=True)
+            try:
+                report_png = build_dashboard_png(
+                    project_data,
+                    timeline_dates,
+                    smart_insights(project_data, timeline_dates),
+                    report_year=all_timeline[-1].year,
+                    updated_at=report_updated_at,
+                    width=1920,
+                )
+                st.download_button(
+                    "📷 Baixar foto do painel",
+                    data=report_png,
+                    file_name=(
+                        f"relatorio_pintura_{effective_start.strftime('%Y%m%d')}_"
+                        f"{effective_end.strftime('%Y%m%d')}.png"
+                    ),
+                    mime="image/png",
+                    use_container_width=True,
+                )
+            except Exception:
+                st.button("📷 Imagem indisponível", disabled=True, use_container_width=True)
+        st.markdown(
+            f'<div class="selection-note">Recorte atual: {len(project_data)} de {len(all_projects)} projetos · '
+            f'{period_summary} · atualização automática</div>',
+            unsafe_allow_html=True,
+        )
+        render_dashboard(
+            project_data,
+            timeline_dates,
+            all_timeline[-1].year,
+            report_updated_at,
+        )
     except Exception as exc:
         st.error(f"Não foi possível sincronizar o painel com o Formulário MTECH: {exc}")
 
@@ -835,3 +884,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
