@@ -295,6 +295,8 @@ class Project:
     sent_quantity: float
     returned_quantity: float
     completion_rate: float
+    # items: mapping de nome do item -> dict com totais {'sent': float, 'returned': float}
+    items: dict[str, dict] = None
 
 
 def normalize(value: object) -> str:
@@ -503,10 +505,79 @@ def build_projects(
 
     if not visible_entries:
         return [], []
+
+    # Agrupar por "projeto raiz" (cliente + codigo_pintura) e agregar por itens individuais
+    merged: dict[tuple[str, str], dict] = {}
+    for entry in visible_entries:
+        root_key = (normalize(entry.cliente), normalize(entry.codigo_pintura))
+        if root_key not in merged:
+            merged[root_key] = {
+                "cliente": entry.cliente,
+                "codigo_pintura": entry.codigo_pintura,
+                "entries": [],
+            }
+        merged[root_key]["entries"].append(entry)
+
+    merged_projects: list[Project] = []
+    for group in merged.values():
+        entries = group["entries"]
+        name_parts = []
+        client_label = re.sub(r"\s+COFFEE$", "", entries[0].cliente, flags=re.I)
+        code_number = re.sub(r"^.*?-\s*", "", entries[0].codigo_pintura).lstrip("0") or entries[0].codigo_pintura
+        name = f"{client_label} {code_number}".strip()
+
+        sent = [e for e in entries if e.movement == "remessa"]
+        returned = [e for e in entries if e.movement == "retorno"]
+        sent_dates = sorted({e.occurred_on for e in sent})
+        return_dates = sorted({e.occurred_on for e in returned})
+        sent_total = sum(e.quantity for e in sent)
+        returned_total = sum(e.quantity for e in returned)
+        # agregação por item (usar display se disponível, senão numero_display)
+        items: dict[str, dict] = defaultdict(lambda: {"sent": 0.0, "returned": 0.0})
+        for e in entries:
+            item_label = (e.display or str(e.numero_display) or "SEM ITEM").strip()
+            if e.movement == "remessa":
+                items[item_label]["sent"] += e.quantity
+            else:
+                items[item_label]["returned"] += e.quantity
+
+        if returned and not sent:
+            status = "Parcial"
+        elif not returned:
+            status = "Sem retorno"
+        elif sent_total > 0 and returned_total < sent_total:
+            status = "Parcial"
+        else:
+            status = "Concluído"
+
+        first_sent = sent_dates[0] if sent_dates else None
+        first_return = return_dates[0] if return_dates else None
+        last_return = return_dates[-1] if return_dates else None
+        completion_rate = min(100.0, (returned_total / sent_total * 100)) if sent_total > 0 else 0
+
+        merged_projects.append(
+            Project(
+                name=name,
+                sent_dates=sent_dates,
+                return_dates=return_dates,
+                sent_day_count=len(sent_dates),
+                first_return_days=(first_return - first_sent).days if first_sent and first_return else None,
+                conclusion_days=(last_return - first_sent).days if first_sent and last_return else None,
+                status=status,
+                updated_at=max(e.updated_at for e in entries),
+                first_sent=first_sent,
+                last_activity=max(e.occurred_on for e in entries),
+                sent_quantity=sent_total,
+                returned_quantity=returned_total,
+                completion_rate=completion_rate,
+                items=dict(items),
+            )
+        )
+
     start = start_date or min(entry.occurred_on for entry in visible_entries)
     end = end_date or max(entry.occurred_on for entry in visible_entries)
     timeline = [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
-    return projects, timeline
+    return merged_projects, timeline
 
 
 def safe(value: object) -> str:
@@ -720,18 +791,39 @@ def render_dashboard(
             timeline_cells.append(f'<div class="tl-cell">{connector}{mark}</div>')
         timeline_cells.append(f'<div class="tl-cell">{status_html(project.status)}</div>')
 
+    # construir cabeçalho dinâmico com colunas por item (Envio / Retorno)
+    # coletar nomes distintos de itens visíveis no recorte
+    item_names = sorted({item for project in projects for item in (project.items or {}).keys()})
+
+    # montar cabeçalho da tabela de resumo
+    summary_table_header = (
+        "<thead><tr>"
+        "<th>Projeto</th><th>Dias Rem.</th><th>Env./sem.</th><th>Ret./sem.</th>"
+        + "".join(f"<th>{safe(name)} Env.</th><th>{safe(name)} Ret.</th>" for name in item_names)
+        + "<th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>"
+    )
+
     summary_rows = []
     for index, project in enumerate(projects, 1):
         first_return = "—" if project.first_return_days is None else f"{project.first_return_days} dias"
         conclusion = "não concluído" if project.conclusion_days is None else f"{project.conclusion_days} dias"
         weekly_sent = format_quantity(project.sent_quantity / weeks_in_period)
         weekly_return = format_quantity(project.returned_quantity / weeks_in_period)
+
+        # valores por item (totais no recorte)
+        item_cells = []
+        for name in item_names:
+            vals = (project.items or {}).get(name, {"sent": 0.0, "returned": 0.0})
+            item_cells.append(f"<td title='Total enviado para {safe(name)}'>{format_quantity(vals.get('sent',0.0))}</td>")
+            item_cells.append(f"<td title='Total retornado para {safe(name)}'>{format_quantity(vals.get('returned',0.0))}</td>")
+
         summary_rows.append(
             f"<tr><td class='summary-name'><span class='tl-index'>{index}</span>{safe(project.name)}</td>"
             f"<td>{project.sent_day_count}</td>"
             f"<td title='Base: {weeks_in_period} semana(s) ISO'>{weekly_sent}</td>"
             f"<td title='Base: {weeks_in_period} semana(s) ISO'>{weekly_return}</td>"
-            f"<td>{first_return}</td><td>{conclusion}</td>"
+            + "".join(item_cells)
+            + f"<td>{first_return}</td><td>{conclusion}</td>"
             f"<td>{status_html(project.status)}</td></tr>"
         )
 
@@ -771,7 +863,7 @@ def render_dashboard(
         <section class="panel">
           <div class="summary-table-wrap">
             <table class="summary-table">
-              <thead><tr><th>Projeto</th><th>Dias Rem.</th><th>Env./sem.</th><th>Ret./sem.</th><th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>
+              {summary_table_header}
               <tbody>{''.join(summary_rows)}</tbody>
             </table>
           </div>
