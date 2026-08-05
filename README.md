@@ -1,4 +1,4 @@
-# Painel de Producao IA
+﻿# Painel de Producao IA
 
 Painel Streamlit para analise dos lancamentos do FORMS-MTECH.
 
@@ -29,7 +29,7 @@ prioridade, e combinacoes duplicadas na planilha nao usam fallback silencioso.
 Configure nos Secrets do Streamlit Cloud:
 
 ```toml
-DATABASE_URL = "postgresql://usuario:senha@host:5432/banco?sslmode=require"
+DATABASE_URL = "******host:5432/banco?sslmode=require"
 ```
 
 ## Login de acesso
@@ -97,12 +97,6 @@ O botão **Salvar previsão** cria, se necessário, a tabela PostgreSQL
 O usuário do `DATABASE_URL` precisa de permissão para `CREATE TABLE` no primeiro
 uso e de `SELECT`/`INSERT` nos usos seguintes.
 
-Limitações da fonte atual: `production_entries` não possui cadastro de displays
-ativos/cancelados, status formal de conclusão, paradas, feriados, turno ou
-eficiência consolidada por lote. Por isso, conclusão é inferida por duração
-positiva; feriados/turno são parâmetros da simulação; e a tela não inventa nem
-exibe uma eficiência de lote inexistente.
-
 ### Máquinas, dependências e paralelismo
 
 A tela possui dois modos:
@@ -153,9 +147,17 @@ python scripts/migrate_sqlite_to_postgres.py --dry-run
 Para migrar para o PostgreSQL:
 
 ```powershell
-$env:DATABASE_URL="postgresql://usuario:senha@host:5432/banco?sslmode=require"
+$env:DATABASE_URL="******host:5432/banco?sslmode=require"
 python scripts/migrate_sqlite_to_postgres.py
 ```
 
 O script usa `ON CONFLICT DO NOTHING`, entao pode ser reexecutado sem duplicar
 registros que ja existam por `source_hash` ou `import_key`.
+
+---
+
+Upstream template (vinext-starter)
+
+Este repositório tem origem em um template chamado vinext-starter. Parte do
+conteudo do README original foi mantido no repositório remoto; consulte:
+https://github.com/cloudflare/vinext
