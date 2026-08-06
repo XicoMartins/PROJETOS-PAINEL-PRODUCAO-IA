@@ -76,21 +76,21 @@ CSS = """
     line-height: 1; text-transform: uppercase; letter-spacing: -.7px; font-weight: 900;
   }
   .report-head p { color: var(--teal); margin: 6px 0 0; font-size: 17px; font-weight: 800; }
-  .source-line { margin-top: 5px; color: #59708b; font-size: 10px; font-weight: 700; }
+  .source-line { margin-top: 5px; color: #59708b; font-size: 12px; font-weight: 700; }
   .live-dot {
     display: inline-block; width: 7px; height: 7px; border-radius: 50%;
     background: var(--green); margin-right: 5px; box-shadow: 0 0 0 3px #dff3dc;
   }
   .method-note {
     border-left: 1px solid #d7e3ec; padding-left: 13px; color: #415776;
-    font-size: 10px; line-height: 1.35; font-style: italic; font-weight: 700;
+    font-size: 12px; line-height: 1.4; font-style: italic; font-weight: 700;
   }
   .method-note div + div { margin-top: 4px; }
-  .toolbar-help { margin: 1px 0 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
+  .toolbar-help { margin: 1px 0 5px; color: var(--muted); font-size: 12px; font-weight: 800; }
   div[data-testid="stPopover"] > button,
   div[data-testid="stDownloadButton"] > button {
     min-height: 42px; border: 1px solid #bfcfdd; border-radius: 9px;
-    background: #fff; color: var(--navy); font-weight: 800; box-shadow: 0 3px 10px rgba(10, 50, 90, .06);
+    background: #fff; color: var(--navy); font-size: 14px; font-weight: 800; box-shadow: 0 3px 10px rgba(10, 50, 90, .06);
   }
   div[data-testid="stDownloadButton"] > button {
     border-color: var(--navy); background: var(--navy); color: #fff;
@@ -98,18 +98,21 @@ CSS = """
   div[data-testid="stPopover"] > button:hover { border-color: var(--blue); color: var(--blue); }
   div[data-testid="stDownloadButton"] > button:hover { border-color: var(--blue); background: var(--blue); color: #fff; }
   [data-testid="stMultiSelect"] label, [data-testid="stDateInput"] label,
-  [data-testid="stSlider"] label, [data-testid="stToggle"] label { color: var(--ink); font-weight: 800; }
+  [data-testid="stSlider"] label, [data-testid="stToggle"] label {
+    color: var(--ink); font-size: 14px; font-weight: 800;
+  }
+  [data-baseweb="select"] > div, [data-testid="stDateInput"] input { font-size: 14px; }
   .selection-note {
     margin: 0 0 7px; padding: 6px 10px; border-radius: 7px; background: #f5f9fc;
-    color: var(--muted); font-size: 10px; font-weight: 700; text-align: center;
+    color: var(--muted); font-size: 12px; line-height: 1.4; font-weight: 700; text-align: center;
   }
   .kpi-grid {
     display: grid; grid-template-columns: repeat(7, minmax(128px, 1fr));
     gap: 10px; margin: 5px 0 9px;
   }
   .kpi {
-    min-height: 76px; background: linear-gradient(180deg, #fff, #f9fbfd);
-    border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+    min-height: 84px; background: linear-gradient(180deg, #fff, #f9fbfd);
+    border: 1px solid var(--line); border-radius: 10px; padding: 11px;
     display: flex; align-items: center; gap: 9px; box-shadow: 0 3px 9px rgba(10, 50, 90, .07);
   }
   .kpi-icon {
@@ -118,29 +121,29 @@ CSS = """
   }
   .kpi:nth-child(2) .kpi-icon { background: #ddf3f3; color: var(--teal); }
   .kpi:nth-child(3) .kpi-icon { background: #edf8e8; color: #4d8c2b; }
-  .kpi strong { color: var(--navy); font-size: 28px; line-height: 1; }
-  .kpi p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.12; font-weight: 800; }
+  .kpi strong { color: var(--navy); font-size: 31px; line-height: 1; }
+  .kpi p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.2; font-weight: 800; }
   .panel {
     background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-top: 8px;
   }
   .panel-title {
     padding: 9px 13px; color: var(--navy); text-transform: uppercase;
-    text-align: center; font-size: 14px; font-weight: 900; letter-spacing: .15px; border-bottom: 1px solid var(--line);
+    text-align: center; font-size: 16px; font-weight: 900; letter-spacing: .15px; border-bottom: 1px solid var(--line);
   }
-  .legend { font-size: 10px; font-weight: 800; color: var(--muted); margin-left: 10px; }
+  .legend { font-size: 12px; font-weight: 800; color: var(--muted); margin-left: 12px; }
   .legend .sq { color: var(--blue); } .legend .dot { color: var(--green); }
   .timeline-wrap { overflow-x: auto; padding: 6px 9px 8px; }
-  .timeline-grid { display: grid; min-width: 980px; align-items: stretch; font-size: 10px; }
+  .timeline-grid { display: grid; min-width: 1080px; align-items: stretch; font-size: 12px; }
   .tl-cell {
-    min-height: 31px; display: flex; align-items: center; justify-content: center;
+    min-height: 36px; display: flex; align-items: center; justify-content: center;
     border-bottom: 1px solid #edf2f6; border-right: 1px dotted #e4eaf0;
     position: relative;
   }
-  .tl-head { min-height: 27px; font-weight: 900; color: var(--navy); }
-  .tl-project { justify-content: flex-start; padding: 0 8px; font-weight: 800; font-size: 10px; }
+  .tl-head { min-height: 31px; font-weight: 900; color: var(--navy); }
+  .tl-project { justify-content: flex-start; padding: 0 9px; font-weight: 800; font-size: 12px; line-height: 1.25; }
   .tl-index {
     display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px;
-    border-radius: 50%; background: var(--navy); color: white; margin-right: 7px; font-size: 9px;
+    border-radius: 50%; background: var(--navy); color: white; margin-right: 7px; font-size: 10px;
   }
   .event-line {
     position: absolute; left: 0; right: 0; height: 2px; z-index: 1;
@@ -161,7 +164,7 @@ CSS = """
   .mark-both { position: relative; z-index: 3; display: flex; gap: 3px; align-items: center; }
   .status {
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-    border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 900;
+    border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 900;
     white-space: nowrap;
   }
   .status-done { background: #edf8e8; color: #398029; border: 1px solid #cce9c2; }
@@ -172,10 +175,10 @@ CSS = """
     gap: 10px; margin-top: 2px;
   }
   .summary-table-wrap { width: 100%; overflow-x: auto; }
-  .summary-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 10px; }
-  .summary-table th { background: var(--navy); color: white; padding: 6px 5px; text-align: center; }
+  .summary-table { width: 100%; min-width: 900px; border-collapse: collapse; font-size: 12px; }
+  .summary-table th { background: var(--navy); color: white; padding: 8px 6px; text-align: center; line-height: 1.25; }
   .summary-table th:first-child, .summary-table td:first-child { text-align: left; }
-  .summary-table td { padding: 5px; border-bottom: 1px solid #e5ecf2; text-align: center; }
+  .summary-table td { padding: 7px 6px; border-bottom: 1px solid #e5ecf2; text-align: center; line-height: 1.35; }
   .summary-table tbody tr:nth-child(even) { background: #f7fafc; }
   .summary-name { font-weight: 800; color: var(--ink); }
   .insights {
@@ -205,8 +208,8 @@ CSS = """
   }
   .insight {
     display: grid; grid-template-columns: 31px minmax(0, 1fr); gap: 7px;
-    align-items: center; min-height: 38px; padding: 5px 0;
-    border-top: 1px dotted #ccdbe5; font-size: 10.5px; line-height: 1.28;
+    align-items: center; min-height: 43px; padding: 6px 0;
+    border-top: 1px dotted #ccdbe5; font-size: 12px; line-height: 1.38;
   }
   .insights-head + .insight { border-top: 0; }
   .insight-icon {
@@ -221,7 +224,7 @@ CSS = """
   .insight-rhythm .insight-icon { color: #078b98; }
   .footnote {
     position: relative; margin-top: 9px; padding: 9px 130px 9px 52px; border-radius: 8px;
-    background: #eaf4fc; color: #37516f; font-size: 9px; line-height: 1.35;
+    background: #eaf4fc; color: #37516f; font-size: 11px; line-height: 1.45;
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 14px; overflow: hidden;
   }
   .footnote::before {

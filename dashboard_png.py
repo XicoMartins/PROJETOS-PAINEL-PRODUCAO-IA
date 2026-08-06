@@ -742,18 +742,18 @@ def generate_dashboard_png(
     header_h = 88
     kpi_h = 94
     timeline_title_h = 45
-    timeline_header_h = 31
-    timeline_row_h = 32
+    timeline_header_h = 34
+    timeline_row_h = 36
     timeline_h = timeline_title_h + timeline_header_h + max(1, len(normalized_projects)) * timeline_row_h + 13
-    table_header_h = 34
-    table_row_h = 27
+    table_header_h = 38
+    table_row_h = 32
     table_h = table_header_h + max(1, len(normalized_projects)) * table_row_h + 4
-    insight_row_h = 39
+    insight_row_h = 44
     insight_h = 50 + max(1, min(5, len(normalized_insights))) * insight_row_h + 6
     table_panel_h = max(205, table_h)
     insight_panel_h = max(185, insight_h)
     bottom_h = max(table_panel_h, insight_panel_h)
-    foot_h = 78
+    foot_h = 86
     total_h = margin + header_h + kpi_h + 12 + timeline_h + 13 + bottom_h + 13 + foot_h + margin
 
     image = Image.new("RGB", (width, total_h), P.canvas)
@@ -773,7 +773,7 @@ def generate_dashboard_png(
     subtitle_font = FONTS.get(19, True)
     draw.text((title_x, margin + 46), _ellipsize(draw, subtitle_line, subtitle_font, title_max), font=subtitle_font, fill=P.teal)
     note_x = width - note_w + 5
-    note_font = FONTS.get(10, False)
+    note_font = FONTS.get(11, False)
     notes = [
         "* Da 1ª remessa até o 1º retorno registrado",
         "** Da 1ª remessa até o último retorno registrado",
@@ -787,7 +787,7 @@ def generate_dashboard_png(
         note_y += 2
     if updated_at:
         stamp = updated_at.strftime("%d/%m/%Y %H:%M") if isinstance(updated_at, datetime) else str(updated_at)
-        draw.text((note_x, margin + 69), f"Atualizado: {stamp}", font=FONTS.get(9, False), fill=P.muted)
+        draw.text((note_x, margin + 69), f"Atualizado: {stamp}", font=FONTS.get(10, False), fill=P.muted)
 
     # Indicadores.
     y = margin + header_h
@@ -810,21 +810,21 @@ def generate_dashboard_png(
         _draw_metric_icon(draw, icon_box, index, icon_fg, metric.icon)
         text_x = icon_box[2] + 13
         text_w = max(25, right - text_x - 9)
-        value_font = FONTS.get(29 if card_count <= 7 else 25, True)
+        value_font = FONTS.get(31 if card_count <= 7 else 27, True)
         draw.text((text_x, top + 12), _ellipsize(draw, metric.value, value_font, text_w), font=value_font, fill=P.navy)
-        label_font = FONTS.get(10 if card_count <= 7 else 9, True)
+        label_font = FONTS.get(11 if card_count <= 7 else 10, True)
         for line_no, line in enumerate(_wrap(draw, metric.label, label_font, text_w, 3)):
-            draw.text((text_x, top + 51 + line_no * 11), line, font=label_font, fill=P.ink)
+            draw.text((text_x, top + 51 + line_no * 12), line, font=label_font, fill=P.ink)
 
     # Linha do tempo.
     timeline_top = y + kpi_h + 4
     timeline_box = (margin, timeline_top, width - margin, timeline_top + timeline_h)
     _panel(draw, timeline_box, radius=14, shadow=False)
-    title_font_small = FONTS.get(16, True)
+    title_font_small = FONTS.get(17, True)
     timeline_title = "LINHA DO TEMPO — REMESSAS E RETORNOS POR PROJETO"
     legend = "■ REMESSA   ● RETORNO"
     title_width = _text_width(draw, timeline_title, title_font_small)
-    legend_font = FONTS.get(10, True)
+    legend_font = FONTS.get(11, True)
     legend_width = _text_width(draw, legend, legend_font)
     group_width = title_width + 20 + legend_width
     group_x = max(margin + 8, (width - group_width) / 2)
@@ -840,12 +840,12 @@ def generate_dashboard_png(
     date_left = grid_left + project_col
     date_right = grid_right - status_col
     date_w = (date_right - date_left) / day_count
-    header_font = FONTS.get(10, True)
+    header_font = FONTS.get(11, True)
     draw.text((grid_left + 12, header_top + 11), "Projeto", font=header_font, fill=P.navy)
     for index, day in enumerate(timeline):
         cell_left = date_left + index * date_w
         label = day.strftime("%d/%m")
-        _draw_centered(draw, (cell_left, header_top, cell_left + date_w, header_top + timeline_header_h), label, FONTS.get(9, True), P.navy)
+        _draw_centered(draw, (cell_left, header_top, cell_left + date_w, header_top + timeline_header_h), label, FONTS.get(10, True), P.navy)
         draw.line((cell_left, header_top, cell_left, timeline_box[3]-8), fill=P.grid, width=1)
     _draw_centered(draw, (date_right, header_top, grid_right, header_top+timeline_header_h), "Status", header_font, P.navy)
     draw.line((date_right, header_top, date_right, timeline_box[3]-8), fill=P.grid, width=1)
@@ -870,9 +870,9 @@ def generate_dashboard_png(
         circle = (grid_left + 9, top + 6, grid_left + 29, top + 26)
         draw.ellipse(circle, fill=P.navy)
         _draw_centered(draw, circle, row_index + 1, FONTS.get(9, True), "white")
-        name_font = FONTS.get(10, True)
+        name_font = FONTS.get(11, True)
         name = _ellipsize(draw, project.name, name_font, project_col - 47)
-        draw.text((grid_left + 36, top + 10), name, font=name_font, fill=P.ink)
+        draw.text((grid_left + 36, top + 11), name, font=name_font, fill=P.ink)
 
         sent = [value for value in project.sent_dates if value in timeline_index]
         returned = [value for value in project.return_dates if value in timeline_index]
@@ -932,9 +932,9 @@ def generate_dashboard_png(
         if col_index:
             draw.line((cursor, bottom_top, cursor, header_bottom), fill="#2F5487", width=1)
         if col_index == 0:
-            draw.text((cursor+10, bottom_top+11), label, font=FONTS.get(10, True), fill="white")
+            draw.text((cursor+10, bottom_top+13), label, font=FONTS.get(11, True), fill="white")
         else:
-            _draw_centered(draw, (cursor, bottom_top, cursor+col_w, header_bottom), label, FONTS.get(9, True), "white")
+            _draw_centered(draw, (cursor, bottom_top, cursor+col_w, header_bottom), label, FONTS.get(10, True), "white")
         cursor += col_w
     for row_index, project in enumerate(normalized_projects):
         top = header_bottom + row_index * table_row_h
@@ -956,13 +956,13 @@ def generate_dashboard_png(
                 circle = (cursor+9, top+5, cursor+26, top+22)
                 draw.ellipse(circle, fill=P.navy)
                 _draw_centered(draw, circle, row_index+1, FONTS.get(8, True), "white")
-                font = FONTS.get(9, True)
+                font = FONTS.get(10, True)
                 text = _ellipsize(draw, value, font, col_w-39)
-                draw.text((cursor+32, top+9), text, font=font, fill=P.ink)
+                draw.text((cursor+32, top+11), text, font=font, fill=P.ink)
             elif col_index == len(values)-1:
                 _draw_status(draw, (int(cursor), top, int(cursor+col_w), bottom), str(value), compact=True)
             else:
-                _draw_centered(draw, (cursor, top, cursor+col_w, bottom), value, FONTS.get(9, False), P.ink)
+                _draw_centered(draw, (cursor, top, cursor+col_w, bottom), value, FONTS.get(10, False), P.ink)
             cursor += col_w
     if not normalized_projects:
         _draw_centered(draw, (table_box[0], header_bottom, table_box[2], header_bottom+table_row_h), "Nenhum dado no recorte", FONTS.get(10), P.muted)
@@ -983,9 +983,9 @@ def generate_dashboard_png(
         text_x = content_x + 34
         text_w = insight_box[2]-text_x-18
         full = f"{insight.title}: {insight.text}".rstrip(": ")
-        lines = _wrap(draw, full, FONTS.get(10, False), text_w, 3)
+        lines = _wrap(draw, full, FONTS.get(11, False), text_w, 3)
         for line_no, line in enumerate(lines):
-            draw.text((text_x, top + 3 + line_no*13), line, font=FONTS.get(10, False), fill=P.ink)
+            draw.text((text_x, top + 3 + line_no*14), line, font=FONTS.get(11, False), fill=P.ink)
 
     # Rodapé explicativo.
     foot_top = bottom_top + bottom_h + 13
@@ -1010,9 +1010,9 @@ def generate_dashboard_png(
         column = index % 3
         row = index // 3
         left = foot_start + column*(foot_col+foot_gap)
-        y_text = foot_top + 10 + row * 29
-        bold = FONTS.get(9, True)
-        regular = FONTS.get(9, False)
+        y_text = foot_top + 11 + row * 32
+        bold = FONTS.get(10, True)
+        regular = FONTS.get(10, False)
         draw.text((left, y_text), f"{label} =", font=bold, fill=P.ink)
         x_text = left + _text_width(draw, f"{label} = ", bold)
         remaining = max(20, left+foot_col-x_text)
