@@ -817,13 +817,16 @@ def dashboard_fragment() -> None:
         with filter_column:
             st.markdown('<div class="toolbar-help">CONTROLES DO RELATÓRIO</div>', unsafe_allow_html=True)
             with st.popover("⚙ Filtros de projetos e período", use_container_width=True):
-                st.caption("A seleção recalcula os indicadores, a tabela, os alertas e a imagem para download.")
+                st.caption(
+                    "O período define os modelos exibidos. Selecione projetos somente quando quiser restringir o recorte."
+                )
                 selected_projects = st.multiselect(
                     "Projetos lançados",
                     options=project_names,
-                    default=project_names,
+                    default=[],
                     key="painting_project_filter",
-                    placeholder="Selecione um ou mais projetos",
+                    placeholder="Todos os projetos do período",
+                    help="Sem projetos selecionados, o painel exibe todos os modelos com movimento no período escolhido.",
                 )
                 selected_period = st.slider(
                     "Período analisado",
@@ -857,9 +860,10 @@ def dashboard_fragment() -> None:
                     )
                     effective_start = effective_end = exact_day
 
+        selected_name_filter = set(selected_projects) if selected_projects else None
         project_data, timeline_dates = build_projects(
             raw_rows,
-            selected_names=set(selected_projects),
+            selected_names=selected_name_filter,
             start_date=effective_start,
             end_date=effective_end,
         )
@@ -873,8 +877,8 @@ def dashboard_fragment() -> None:
                 st.markdown('<div class="toolbar-help">EXPORTAÇÃO</div>', unsafe_allow_html=True)
                 st.button("📷 Baixar foto do painel", disabled=True, use_container_width=True)
             st.markdown(
-                '<div class="empty"><h3>Nenhum movimento encontrado para os filtros selecionados</h3>'
-                '<p>Escolha outro projeto ou amplie o período analisado.</p></div>',
+                '<div class="empty"><h3>Nenhum movimento encontrado no período selecionado</h3>'
+                '<p>Escolha outro período ou amplie o intervalo analisado.</p></div>',
                 unsafe_allow_html=True,
             )
             return
