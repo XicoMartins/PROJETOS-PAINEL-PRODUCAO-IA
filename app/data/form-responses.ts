@@ -3,6 +3,8 @@ export type PaintProject = {
   remessas: string[];
   retornos: string[];
   remittanceDayCount: number;
+  sentToday?: number;
+  returnedToday?: number;
   firstReturnDays?: number;
   conclusionDays?: number;
   status: "Concluído" | "Parcial" | "Sem retorno";

@@ -88,6 +88,21 @@ function formatDateKey(date: Date) {
   return `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function todayKeyInSaoPaulo() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function isoDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
 function movementFromProcess(process: string, machinery: string): Movement | null {
   const key = normalized(process);
   if (key.includes("RETORNO")) return "retorno";
@@ -191,6 +206,7 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
     .slice(0, maxProjects)
     .sort((left, right) => Math.min(...left.map((entry) => entry.date.valueOf())) - Math.min(...right.map((entry) => entry.date.valueOf())));
 
+  const todayKey = todayKeyInSaoPaulo();
   const projects = selectedGroups.map<PaintProject>((entries) => {
     const remittanceEntries = entries.filter((entry) => entry.movement === "remessa");
     const returnEntries = entries.filter((entry) => entry.movement === "retorno");
@@ -210,6 +226,12 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
     );
     const totalSent = remittanceEntries.reduce((sum, entry) => sum + entry.quantity, 0);
     const totalReturned = returnEntries.reduce((sum, entry) => sum + entry.quantity, 0);
+    const sentToday = remittanceEntries
+      .filter((entry) => isoDateKey(entry.date) === todayKey)
+      .reduce((sum, entry) => sum + entry.quantity, 0);
+    const returnedToday = returnEntries
+      .filter((entry) => isoDateKey(entry.date) === todayKey)
+      .reduce((sum, entry) => sum + entry.quantity, 0);
     const hasReturn = returnEntries.length > 0;
     const isPartial = hasReturn && totalSent > 0 && totalReturned < totalSent;
     const reference = entries[0];
@@ -219,6 +241,8 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
       remessas: remittanceDates,
       retornos: returnDates,
       remittanceDayCount: remittanceDates.length,
+      sentToday,
+      returnedToday,
       firstReturnDays: firstRemittance && firstReturn ? daysBetween(firstRemittance, firstReturn) : undefined,
       conclusionDays: firstRemittance && lastReturn ? daysBetween(firstRemittance, lastReturn) : undefined,
       status: !hasReturn ? "Sem retorno" : isPartial ? "Parcial" : "Concluído",

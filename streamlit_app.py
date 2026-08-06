@@ -9,6 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from statistics import mean, pstdev
+from zoneinfo import ZoneInfo
 
 import psycopg
 import streamlit as st
@@ -175,10 +176,12 @@ CSS = """
     gap: 10px; margin-top: 2px;
   }
   .summary-table-wrap { width: 100%; overflow-x: auto; }
-  .summary-table { width: 100%; min-width: 900px; border-collapse: collapse; font-size: 12px; }
+  .summary-table { width: 100%; min-width: 1160px; border-collapse: collapse; font-size: 12px; }
   .summary-table th { background: var(--navy); color: white; padding: 8px 6px; text-align: center; line-height: 1.25; }
+  .summary-table th.today-col { background: #086681; }
   .summary-table th:first-child, .summary-table td:first-child { text-align: left; }
   .summary-table td { padding: 7px 6px; border-bottom: 1px solid #e5ecf2; text-align: center; line-height: 1.35; }
+  .summary-table td.today-value { background: #f0f8fb; color: var(--navy); font-weight: 900; }
   .summary-table tbody tr:nth-child(even) { background: #f7fafc; }
   .summary-name { font-weight: 800; color: var(--ink); }
   .insights {
@@ -297,6 +300,8 @@ class Project:
     last_activity: date
     sent_quantity: float
     returned_quantity: float
+    sent_today_quantity: float
+    returned_today_quantity: float
     completion_rate: float
 
 
@@ -455,6 +460,7 @@ def build_projects(
     selected.sort(key=lambda items: min(item.occurred_on for item in items))
     projects: list[Project] = []
     visible_entries: list[Entry] = []
+    today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
     for all_entries in selected:
         name = project_name(all_entries[0])
         if selected_names is not None and name not in selected_names:
@@ -474,6 +480,16 @@ def build_projects(
         return_dates = sorted({entry.occurred_on for entry in returned})
         sent_total = sum(entry.quantity for entry in sent)
         returned_total = sum(entry.quantity for entry in returned)
+        sent_today_total = sum(
+            entry.quantity
+            for entry in all_entries
+            if entry.occurred_on == today and entry.movement == "remessa"
+        )
+        returned_today_total = sum(
+            entry.quantity
+            for entry in all_entries
+            if entry.occurred_on == today and entry.movement == "retorno"
+        )
         if returned and not sent:
             status = "Parcial"
         elif not returned:
@@ -500,6 +516,8 @@ def build_projects(
                 last_activity=max(entry.occurred_on for entry in entries),
                 sent_quantity=sent_total,
                 returned_quantity=returned_total,
+                sent_today_quantity=sent_today_total,
+                returned_today_quantity=returned_today_total,
                 completion_rate=completion_rate,
             )
         )
@@ -732,6 +750,8 @@ def render_dashboard(
         summary_rows.append(
             f"<tr><td class='summary-name'><span class='tl-index'>{index}</span>{safe(project.name)}</td>"
             f"<td>{project.sent_day_count}</td>"
+            f"<td class='today-value'>{format_quantity(project.sent_today_quantity)}</td>"
+            f"<td class='today-value'>{format_quantity(project.returned_today_quantity)}</td>"
             f"<td title='Base: {weeks_in_period} semana(s) ISO'>{weekly_sent}</td>"
             f"<td title='Base: {weeks_in_period} semana(s) ISO'>{weekly_return}</td>"
             f"<td>{first_return}</td><td>{conclusion}</td>"
@@ -774,7 +794,7 @@ def render_dashboard(
         <section class="panel">
           <div class="summary-table-wrap">
             <table class="summary-table">
-              <thead><tr><th>Projeto</th><th>Dias Rem.</th><th>Env./sem.</th><th>Ret./sem.</th><th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>
+              <thead><tr><th>Projeto</th><th>Dias Rem.</th><th class="today-col">Enviado hoje</th><th class="today-col">Retornado hoje</th><th>Env./sem.</th><th>Ret./sem.</th><th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>
               <tbody>{''.join(summary_rows)}</tbody>
             </table>
           </div>
@@ -788,6 +808,7 @@ def render_dashboard(
         <div><strong>Dias Rem.</strong> = quantidade de datas com remessa registrada.</div>
         <div><strong>Env./sem.</strong> = quantidade líquida enviada ÷ semanas ISO do filtro.</div>
         <div><strong>Ret./sem.</strong> = quantidade líquida retornada ÷ semanas ISO do filtro.</div>
+        <div><strong>Hoje</strong> = totais enviados e retornados na data atual, independentemente do filtro.</div>
         <div><strong>Base semanal</strong> = projetos visíveis; cada semana ISO parcial conta como uma semana.</div>
         <div><strong>1º Ret.</strong> = dias corridos entre a primeira remessa e o primeiro retorno.</div>
         <div><strong>Conclusão</strong> = dias corridos entre a primeira remessa e o último retorno.</div>

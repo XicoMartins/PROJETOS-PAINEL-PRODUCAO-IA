@@ -218,6 +218,8 @@ export default async function Home() {
                   <tr>
                     <th>Projeto</th>
                     <th>Dias Rem.</th>
+                    <th className="today-heading">Enviado hoje</th>
+                    <th className="today-heading">Retornado hoje</th>
                     <th>1º Ret. (dias)</th>
                     <th>Conclusão (dias)</th>
                     <th>Status</th>
@@ -228,6 +230,8 @@ export default async function Home() {
                     <tr key={project.name}>
                       <td><span className="table-number">{index + 1}</span>{project.name}</td>
                       <td>{project.remittanceDayCount}</td>
+                      <td className="today-value">{formatDecimal(project.sentToday ?? 0)}</td>
+                      <td className="today-value">{formatDecimal(project.returnedToday ?? 0)}</td>
                       <td>{project.firstReturnDays ? `${project.firstReturnDays} dias` : "—"}</td>
                       <td>{project.conclusionDays ? `${project.conclusionDays} dias` : "não concluído"}</td>
                       <td><StatusPill status={project.status} /></td>
@@ -257,6 +261,7 @@ export default async function Home() {
           <span className="info-icon" aria-hidden="true">i</span>
           <div>
             <p><strong>Dias Rem.</strong> = quantidade de datas com remessa registrada.</p>
+            <p><strong>Hoje</strong> = totais enviados e retornados na data atual, independentemente do período.</p>
             <p><strong>1º Ret. (dias)</strong> = dias corridos entre a 1ª remessa e a 1ª data de retorno registrada.</p>
             <p><strong>Conclusão (dias)</strong> = dias corridos entre a 1ª remessa e o último retorno registrado.</p>
           </div>

@@ -78,6 +78,8 @@ class ProjectRow:
     return_per_week: float | None = None
     sent_quantity: float | None = None
     returned_quantity: float | None = None
+    sent_today_quantity: float | None = None
+    returned_today_quantity: float | None = None
 
 
 @dataclass(frozen=True)
@@ -242,6 +244,12 @@ def _normalize_projects(projects: Sequence[Any]) -> list[ProjectRow]:
                 ),
                 returned_quantity=_number(
                     _field(item, "returned_quantity", "quantidade_retornada", "total_retornado")
+                ),
+                sent_today_quantity=_number(
+                    _field(item, "sent_today_quantity", "enviado_hoje", "sent_today")
+                ),
+                returned_today_quantity=_number(
+                    _field(item, "returned_today_quantity", "retornado_hoje", "returned_today")
                 ),
             )
         )
@@ -753,7 +761,7 @@ def generate_dashboard_png(
     table_panel_h = max(205, table_h)
     insight_panel_h = max(185, insight_h)
     bottom_h = max(table_panel_h, insight_panel_h)
-    foot_h = 86
+    foot_h = 108
     total_h = margin + header_h + kpi_h + 12 + timeline_h + 13 + bottom_h + 13 + foot_h + margin
 
     image = Image.new("RGB", (width, total_h), P.canvas)
@@ -914,13 +922,14 @@ def generate_dashboard_png(
     )
     if weekly:
         columns = [
-            ("Projeto", .43), ("Dias Rem.", .09), ("Env./sem.", .10),
-            ("Ret./sem.", .10), ("1º Ret.", .09), ("Conclusão", .10), ("Status", .13),
+            ("Projeto", .34), ("Dias", .06), ("Env. hoje", .09), ("Ret. hoje", .09),
+            ("Env./sem.", .08), ("Ret./sem.", .08), ("1º Ret.", .07),
+            ("Conclusão", .08), ("Status", .11),
         ]
     else:
         columns = [
-            ("Projeto", .48), ("Dias Rem.", .12), ("1º Ret.", .13),
-            ("Conclusão", .14), ("Status", .18),
+            ("Projeto", .40), ("Dias", .08), ("Env. hoje", .12), ("Ret. hoje", .12),
+            ("1º Ret.", .09), ("Conclusão", .09), ("Status", .12),
         ]
     total_ratio = sum(ratio for _, ratio in columns)
     widths = [(table_box[2] - table_box[0]) * ratio / total_ratio for _, ratio in columns]
@@ -942,7 +951,12 @@ def generate_dashboard_png(
         if row_index % 2:
             draw.rectangle((table_box[0]+1, top, table_box[2]-1, bottom), fill="#F7FAFC")
         draw.line((table_box[0], bottom, table_box[2], bottom), fill=P.line, width=1)
-        values: list[Any] = [project.name, project.sent_day_count]
+        values: list[Any] = [
+            project.name,
+            project.sent_day_count,
+            _format_number(project.sent_today_quantity),
+            _format_number(project.returned_today_quantity),
+        ]
         if weekly:
             values.extend([_format_number(project.sent_per_week), _format_number(project.return_per_week)])
         values.extend([
@@ -996,6 +1010,7 @@ def generate_dashboard_png(
     _draw_centered(draw, info_circle, "i", FONTS.get(15, True), "white")
     footnotes = [
         ("Dias Rem.", "datas com remessa registrada."),
+        ("Hoje", "totais do dia atual, independentemente do filtro."),
         ("Env./sem.", "volume enviado ÷ semanas ISO do filtro."),
         ("Ret./sem.", "volume retornado ÷ semanas ISO do filtro."),
         ("Base semanal", "cada semana ISO parcial conta como uma semana."),
