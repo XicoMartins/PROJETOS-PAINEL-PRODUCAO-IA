@@ -244,3 +244,76 @@ table .status-pill { min-width: 94px; border: 0; background: transparent; justif
   .entries-totals { width: 100%; }
   .entries-totals span { min-width: 0; flex: 1; }
 }
+
+/* GPTSites usado como mockup fiel ao painel oficial do Streamlit. */
+.streamlit-mockup { width: 100%; max-width: 1920px; margin: 0 auto; padding: 28px 46px 14px; background: #eaf2f7; }
+.report-controls { display: grid; grid-template-columns: minmax(0, 2.75fr) minmax(270px, 1fr); gap: 10px 18px; margin-bottom: 8px; }
+.control-block, .export-block { display: grid; gap: 7px; }
+.control-block b, .export-block b { color: #556d8e; font-size: 11px; letter-spacing: .02em; }
+.control-block button, .export-block button { height: 44px; border: 0; border-radius: 9px; font: inherit; font-size: 14px; }
+.control-block button { color: #0b376e; background: #121923; }
+.export-block button { color: white; background: #0b3978; font-weight: 750; }
+.selection-bar { grid-column: 1 / -1; padding: 8px 12px; color: #516987; background: #f7fbfe; border-radius: 8px; font-size: 12px; font-weight: 750; text-align: center; }
+.streamlit-mockup .report-shell { width: 100%; max-width: none; padding: 16px; border-radius: 7px; box-shadow: none; }
+.streamlit-mockup .report-header { grid-template-columns: 84px minmax(0, 1fr) 255px; gap: 16px; margin: 2px 0 10px; padding: 18px 16px 0; }
+.streamlit-mockup .brand-mark { width: 70px; height: 70px; border-radius: 0; background: transparent; box-shadow: none; color: var(--navy); font-size: 42px; transform: rotate(-8deg); }
+.streamlit-mockup .spray-dots { right: -15px; top: 33px; font-size: 18px; }
+.streamlit-mockup .title-block h1 { font-size: clamp(28px, 2.55vw, 43px); }
+.streamlit-mockup .title-block p { margin-top: 12px; font-size: clamp(14px, 1.2vw, 18px); }
+.sync-label { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; color: #526b8d; font-size: 11px; font-weight: 700; }
+.sync-label i { width: 9px; height: 9px; background: var(--green); border-radius: 50%; box-shadow: 0 0 0 3px #dff4d6; }
+.header-notes { padding-left: 16px; border-left: 1px solid #cddae3; color: #334d71; font-size: 11px; font-style: italic; font-weight: 700; line-height: 1.45; }
+.header-notes p { margin: 0 0 5px; }
+.streamlit-mockup .metrics { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin: 0 0 10px; }
+.streamlit-mockup .metric-card { min-width: 0; min-height: 98px; gap: 10px; padding: 12px; border-color: #cadae6; border-radius: 10px; box-shadow: 0 2px 6px #29435d12; }
+.streamlit-mockup .metric-icon { flex-basis: 48px; width: 48px; height: 48px; font-size: 24px; }
+.streamlit-mockup .metric-card strong { display: block; font-size: clamp(25px, 2vw, 33px); }
+.streamlit-mockup .metric-card p { margin: 7px 0 0; font-size: 11px; }
+.streamlit-mockup .metric-card small { color: var(--navy); font-size: 12px; }
+.streamlit-mockup .timeline-card { padding: 0 12px 10px; border-radius: 8px; box-shadow: none; }
+.timeline-titlebar { display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 16px; border-bottom: 1px solid var(--line); }
+.timeline-titlebar h2 { margin: 0; color: var(--navy); font-size: 15px; text-transform: uppercase; }
+.timeline-titlebar .legend { justify-content: center; color: #59708e; font-size: 11px; font-weight: 750; text-transform: uppercase; }
+.streamlit-mockup .timeline-grid { grid-template-columns: 280px minmax(var(--timeline-width), 1fr) 130px; min-width: calc(410px + var(--timeline-width)); }
+.streamlit-mockup .project-heading { padding-left: 8px; }
+.streamlit-mockup .timeline-project { min-height: 39px; }
+.streamlit-mockup .project-name { min-height: 39px; white-space: normal; font-size: 11px; line-height: 1.25; }
+.streamlit-mockup .event-row, .streamlit-mockup .event-cell { height: 39px; }
+.streamlit-mockup .event-track { top: 19px; }
+.streamlit-mockup .lower-grid { grid-template-columns: 1.08fr .92fr; gap: 10px; margin-top: 10px; }
+.streamlit-mockup .summary-table-card { min-height: 320px; border-radius: 8px; }
+.summary-hierarchy { min-width: 1060px; font-size: 11px; }
+.summary-hierarchy th { height: 36px; padding: 7px 8px; }
+.summary-hierarchy td { display: table-cell; height: 39px; padding: 6px 8px; }
+.summary-hierarchy td:first-child { display: table-cell; min-width: 360px; text-align: left; white-space: normal; }
+.summary-hierarchy .display-row td { background: #fff; font-weight: 650; }
+.summary-hierarchy .display-row:nth-child(even) td { background: #f8fbfd; }
+.summary-hierarchy .process-row td { color: #385271; background: #f2f7fa; }
+.summary-hierarchy .process-row td:first-child { padding-left: 44px; font-weight: 700; }
+.process-branch { margin-right: 8px; color: #0a7e98; font-size: 14px; }
+.streamlit-mockup .insights-card { min-height: 320px; padding: 7px 16px; border: 1.5px solid #078da0; border-radius: 8px; }
+.streamlit-mockup .insights-title-row h2 { font-size: 17px; }
+.streamlit-mockup .bulb { flex-basis: 54px; width: 54px; height: 54px; font-size: 25px; transform: none; }
+.streamlit-mockup .insight { grid-template-columns: 48px 1fr; min-height: 48px; }
+.streamlit-mockup .insight > span { color: #008da0; font-size: 22px; }
+.streamlit-mockup .insight p { font-size: 11px; }
+.streamlit-mockup .insight.success > span { color: #59a52b; }
+.streamlit-mockup .insight.warning > span { color: var(--orange); }
+.streamlit-mockup .insight.rhythm > span { color: #008da0; }
+.streamlit-mockup .insight.cycle > span { color: #63a72a; }
+.streamlit-mockup .report-footer { grid-template-columns: 34px 1.05fr 1fr 1fr 110px; min-height: 88px; padding: 9px 16px; font-size: 10px; }
+
+@media (max-width: 1250px) {
+  .streamlit-mockup { padding-inline: 16px; }
+  .streamlit-mockup .metrics { grid-template-columns: repeat(4, 1fr); }
+  .streamlit-mockup .lower-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .streamlit-mockup { padding: 10px 0; }
+  .report-controls { grid-template-columns: 1fr; padding-inline: 10px; }
+  .selection-bar { grid-column: 1; }
+  .streamlit-mockup .report-header { grid-template-columns: 54px 1fr; padding-inline: 0; }
+  .streamlit-mockup .header-notes { grid-column: 1 / -1; }
+  .streamlit-mockup .metrics { grid-template-columns: 1fr 1fr; }
+  .streamlit-mockup .report-footer { grid-template-columns: 30px 1fr; }
+}

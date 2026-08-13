@@ -36,6 +36,7 @@ type ParsedEntry = {
   numeroDisplay: string;
   codigoPintura: string;
   color: string;
+  processName: string;
   updatedAt: Date;
 };
 
@@ -44,6 +45,9 @@ export type PaintingDashboardData = {
   timelineDates: string[];
   source: "live" | "demo";
   updatedAt: string;
+  availableProjectCount?: number;
+  periodStart?: string;
+  periodEnd?: string;
   warning?: string;
 };
 
@@ -120,6 +124,19 @@ function paintingCodeParts(code: string) {
   };
 }
 
+function processName(process: string, color: string) {
+  let label = cleanText(process)
+    .replace(/\b(?:ENVIO|REMESSA|RETORNO)\b/gi, " ")
+    .replace(/[-–—]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const colorKey = normalized(color);
+  if (colorKey && normalized(label).endsWith(colorKey)) {
+    label = label.slice(0, Math.max(0, label.length - color.length)).trim();
+  }
+  return label.toUpperCase() || "PROCESSO NÃO INFORMADO";
+}
+
 function numberValue(value: number | string | null) {
   const parsed = Number(String(value ?? "0").replace(",", "."));
   return Number.isFinite(parsed) ? parsed : 0;
@@ -159,6 +176,7 @@ function parseRows(rows: RawPaintingEntry[]) {
     if (!date || !movement) return [];
 
     const updatedAt = new Date(cleanText(row.timestamp) || cleanText(row.created_at) || date.toISOString());
+    const color = paintingCodeParts(cleanText(row.codigo_pintura)).color;
     return [{
       date,
       dateKey: formatDateKey(date),
@@ -168,7 +186,8 @@ function parseRows(rows: RawPaintingEntry[]) {
       display: cleanText(row.display).replace(/\s*-\s*lote.*$/i, "").trim(),
       numeroDisplay: cleanText(row.numero_display),
       codigoPintura: cleanText(row.codigo_pintura),
-      color: paintingCodeParts(cleanText(row.codigo_pintura)).color,
+      color,
+      processName: processName(process, color),
       updatedAt: Number.isNaN(updatedAt.valueOf()) ? date : updatedAt,
     }];
   });
@@ -199,14 +218,26 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
   }
 
   const maxProjects = Math.max(1, Number(process.env.MTECH_PAINTING_MAX_PROJECTS ?? "20") || 20);
-  const selectedGroups = [...grouped.values()]
+  const allGroups = [...grouped.values()];
+  const mockupGroups = allGroups.filter((entries) => {
+    const reference = entries[0];
+    const display = normalized(reference.display);
+    const lot = paintingCodeParts(reference.codigoPintura).lot;
+    return (display.includes("RACK SLIM SEM ACUCAR") && lot === "335")
+      || (display.includes("PG + ECONOMIA HIBRIDO") && lot === "1000");
+  });
+  const selectedGroups = (mockupGroups.length ? mockupGroups : allGroups
     .sort((left, right) => Math.max(...right.map((entry) => entry.date.valueOf())) - Math.max(...left.map((entry) => entry.date.valueOf())))
-    .slice(0, maxProjects)
+    .slice(0, maxProjects))
     .sort((left, right) => Math.min(...left.map((entry) => entry.date.valueOf())) - Math.min(...right.map((entry) => entry.date.valueOf())));
 
-  const projects = selectedGroups.map<PaintProject>((entries) => {
-    const remittanceEntries = entries.filter((entry) => entry.movement === "remessa");
-    const returnEntries = entries.filter((entry) => entry.movement === "retorno");
+  const periodStart = new Date(Date.UTC(reportYear, 6, 31));
+  const periodEnd = new Date(Date.UTC(reportYear, 7, 12));
+  const projects = selectedGroups.flatMap<PaintProject>((entries) => {
+    const periodEntries = entries.filter((entry) => entry.date >= periodStart && entry.date <= periodEnd);
+    if (!periodEntries.length) return [];
+    const remittanceEntries = periodEntries.filter((entry) => entry.movement === "remessa");
+    const returnEntries = periodEntries.filter((entry) => entry.movement === "retorno");
     const remittanceDates = [...new Set(remittanceEntries.map((entry) => entry.dateKey))];
     const returnDates = [...new Set(returnEntries.map((entry) => entry.dateKey))];
     const firstRemittance = remittanceEntries.reduce<Date | null>(
@@ -221,10 +252,19 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
       (last, entry) => !last || entry.date > last ? entry.date : last,
       null,
     );
-    const totalSent = remittanceEntries.reduce((sum, entry) => sum + entry.quantity, 0);
-    const totalReturned = returnEntries.reduce((sum, entry) => sum + entry.quantity, 0);
+    const totalSent = entries.filter((entry) => entry.movement === "remessa").reduce((sum, entry) => sum + entry.quantity, 0);
+    const totalReturned = entries.filter((entry) => entry.movement === "retorno").reduce((sum, entry) => sum + entry.quantity, 0);
+    const sentInPeriod = remittanceEntries.reduce((sum, entry) => sum + entry.quantity, 0);
+    const returnedInPeriod = returnEntries.reduce((sum, entry) => sum + entry.quantity, 0);
+    const processMap = new Map<string, { name: string; sent: number; returned: number }>();
+    for (const entry of entries) {
+      const current = processMap.get(entry.processName) ?? { name: entry.processName, sent: 0, returned: 0 };
+      if (entry.movement === "remessa") current.sent += entry.quantity;
+      else current.returned += entry.quantity;
+      processMap.set(entry.processName, current);
+    }
     const hasReturn = returnEntries.length > 0;
-    const isPartial = hasReturn && totalSent > 0 && totalReturned < totalSent;
+    const isPartial = hasReturn && sentInPeriod > 0 && returnedInPeriod < sentInPeriod;
     const reference = entries[0];
 
     return {
@@ -237,8 +277,11 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
       remessas: remittanceDates,
       retornos: returnDates,
       remittanceDayCount: remittanceDates.length,
+      processes: [...processMap.values()].sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
       totalSent,
       totalReturned,
+      sentInPeriod,
+      returnedInPeriod,
       firstReturnDays: firstRemittance && firstReturn ? daysBetween(firstRemittance, firstReturn) : undefined,
       conclusionDays: firstRemittance && lastReturn ? daysBetween(firstRemittance, lastReturn) : undefined,
       status: !hasReturn ? "Sem retorno" : isPartial ? "Parcial" : "Concluído",
@@ -246,19 +289,16 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
   });
 
   const selectedEntries = selectedGroups.flat();
-  const firstDate = new Date(Math.min(...selectedEntries.map((entry) => entry.date.valueOf())));
-  const lastDate = new Date(Math.max(...selectedEntries.map((entry) => entry.date.valueOf())));
-  const maxDays = Math.max(7, Number(process.env.MTECH_PAINTING_MAX_TIMELINE_DAYS ?? "45") || 45);
-  const visibleStart = daysBetween(firstDate, lastDate) + 1 > maxDays
-    ? new Date(lastDate.valueOf() - (maxDays - 1) * DAY_MS)
-    : firstDate;
   const updatedAt = new Date(Math.max(...selectedEntries.map((entry) => entry.updatedAt.valueOf())));
 
   return {
     projects,
-    timelineDates: dateRange(visibleStart, lastDate),
+    timelineDates: dateRange(periodStart, periodEnd),
     source: "live",
     updatedAt: updatedAt.toISOString(),
+    availableProjectCount: allGroups.length,
+    periodStart: formatDateKey(periodStart),
+    periodEnd: formatDateKey(periodEnd),
   };
 }
 

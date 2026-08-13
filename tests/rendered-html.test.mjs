@@ -37,8 +37,11 @@ test("keeps project totals independent from the visible-period fields", async ()
 
   assert.match(page, /project\.totalSent \?\? 0/);
   assert.match(page, /project\.totalReturned \?\? 0/);
-  assert.match(data, /totalSent = remittanceEntries\.reduce/);
-  assert.match(data, /totalReturned = returnEntries\.reduce/);
+  assert.match(data, /totalSent = entries\.filter\(\(entry\) => entry\.movement === "remessa"\)\.reduce/);
+  assert.match(data, /totalReturned = entries\.filter\(\(entry\) => entry\.movement === "retorno"\)\.reduce/);
+  assert.match(page, /Display \/ Processo/);
+  assert.match(page, /project\.processes/);
+  assert.match(styles, /\.process-row/);
   assert.match(styles, /\.total-heading/);
   assert.match(styles, /\.total-value/);
 });

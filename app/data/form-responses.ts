@@ -1,10 +1,13 @@
 export type PaintProject = {
   name: string;
+  processes?: Array<{ name: string; sent: number; returned: number }>;
   remessas: string[];
   retornos: string[];
   remittanceDayCount: number;
   totalSent?: number;
   totalReturned?: number;
+  sentInPeriod?: number;
+  returnedInPeriod?: number;
   firstReturnDays?: number;
   conclusionDays?: number;
   status: "Concluído" | "Parcial" | "Sem retorno";
