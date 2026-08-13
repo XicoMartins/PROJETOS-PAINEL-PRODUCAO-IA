@@ -172,29 +172,35 @@ CSS = """
   .status-partial { background: #fff6e5; color: #bf7412; border: 1px solid #f3d79f; }
   .status-none { background: #ffeff1; color: #bd2e3b; border: 1px solid #f0bdc3; }
   .bottom-grid {
-    display: grid; grid-template-columns: 1.06fr .94fr; align-items: start;
+    display: grid; grid-template-columns: minmax(0, 1.42fr) minmax(390px, .58fr); align-items: start;
     gap: 10px; margin-top: 2px;
   }
-  .summary-table-wrap { width: 100%; overflow-x: auto; }
-  .summary-table { width: 100%; min-width: 1160px; border-collapse: collapse; font-size: 12px; }
-  .summary-table th { background: var(--navy); color: white; padding: 8px 6px; text-align: center; line-height: 1.25; }
+  .summary-table-wrap { width: 100%; overflow-x: hidden; }
+  .summary-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: 11px; }
+  .summary-table th { background: var(--navy); color: white; padding: 8px 3px; text-align: center; line-height: 1.2; white-space: normal; }
+  .summary-table th:nth-child(1) { width: 37%; }
+  .summary-table th:nth-child(2) { width: 7%; }
+  .summary-table th:nth-child(3), .summary-table th:nth-child(4) { width: 9%; }
+  .summary-table th:nth-child(5), .summary-table th:nth-child(6), .summary-table th:nth-child(7) { width: 7%; }
+  .summary-table th:nth-child(8) { width: 8%; }
+  .summary-table th:nth-child(9) { width: 9%; }
   .summary-table th.total-col { background: #086681; }
   .summary-table th:first-child, .summary-table td:first-child { text-align: left; }
-  .summary-table td { padding: 7px 6px; border-bottom: 1px solid #e5ecf2; text-align: center; line-height: 1.35; }
+  .summary-table td { padding: 7px 3px; border-bottom: 1px solid #e5ecf2; text-align: center; line-height: 1.3; overflow-wrap: anywhere; }
   .summary-table td.total-value { background: #f0f8fb; color: var(--navy); font-weight: 900; }
   .summary-table .summary-display-row { background: #fff; }
   .summary-table .summary-process-row { background: #f2f7fa; color: #385271; }
-  .summary-table .summary-process-row td:first-child { padding-left: 43px; font-weight: 800; }
+  .summary-table .summary-process-row td:first-child { padding-left: 34px; font-weight: 800; }
   .summary-table .summary-process-row td.total-value { background: #eaf4f8; }
   .summary-name { font-weight: 800; color: var(--ink); }
   .summary-branch { margin-right: 8px; color: var(--teal); font-weight: 900; }
   .insights {
     position: relative; align-self: start; height: fit-content; min-height: 0;
-    padding: 8px 14px 8px 82px; border: 1.5px solid var(--teal); border-radius: 9px;
+    padding: 9px 12px 9px 66px; border: 1.5px solid var(--teal); border-radius: 9px;
   }
   .insights-head { display: flex; align-items: center; min-height: 30px; margin: 0; }
   .bulb-mark {
-    position: absolute; left: 13px; top: 8px; width: 56px; height: 56px;
+    position: absolute; left: 11px; top: 9px; width: 46px; height: 46px;
     display: grid; place-items: center; border-radius: 50%; background: var(--teal);
   }
   .bulb-core {
@@ -210,18 +216,18 @@ CSS = """
     border-radius: 2px; background: #fff;
   }
   .insights h2 {
-    color: var(--teal); font-size: 17px; line-height: 1.1;
+    color: var(--teal); font-size: 18px; line-height: 1.1;
     text-transform: uppercase; margin: 0; font-weight: 900;
   }
   .insight {
-    display: grid; grid-template-columns: 31px minmax(0, 1fr); gap: 7px;
-    align-items: center; min-height: 43px; padding: 6px 0;
-    border-top: 1px dotted #ccdbe5; font-size: 12px; line-height: 1.38;
+    display: grid; grid-template-columns: 29px minmax(0, 1fr); gap: 7px;
+    align-items: center; min-height: 48px; padding: 7px 0;
+    border-top: 1px dotted #ccdbe5; font-size: 13px; line-height: 1.42;
   }
   .insights-head + .insight { border-top: 0; }
   .insight-icon {
     display: grid; width: 27px; height: 27px; place-items: center;
-    color: var(--teal); font-size: 21px; line-height: 1; font-weight: 900;
+    color: var(--teal); font-size: 22px; line-height: 1; font-weight: 900;
   }
   .insight-overview .insight-icon { color: var(--teal); }
   .insight-critical .insight-icon { color: #d92f45; }
@@ -257,7 +263,7 @@ CSS = """
     .report-head { grid-template-columns: 68px minmax(0, 1fr); }
     .method-note { display: none; }
   }
-  @media (max-width: 980px) {
+  @media (max-width: 1250px) {
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
     .bottom-grid { grid-template-columns: 1fr; }
     .footnote { grid-template-columns: 1fr; }

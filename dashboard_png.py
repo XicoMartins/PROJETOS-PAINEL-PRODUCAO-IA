@@ -781,7 +781,7 @@ def generate_dashboard_png(
     table_row_h = 32
     table_row_count = sum(1 + len(project.processes) for project in normalized_projects)
     table_h = table_header_h + max(1, table_row_count) * table_row_h + 4
-    insight_row_h = 44
+    insight_row_h = 54
     insight_h = 50 + max(1, min(5, len(normalized_insights))) * insight_row_h + 6
     table_panel_h = max(205, table_h)
     insight_panel_h = max(185, insight_h)
@@ -935,7 +935,7 @@ def generate_dashboard_png(
     # Tabela e insights.
     bottom_top = timeline_box[3] + 13
     gap = 14
-    left_w = int((width - 2 * margin - gap) * .53)
+    left_w = int((width - 2 * margin - gap) * .69)
     table_box = (margin, bottom_top, margin + left_w, bottom_top + table_panel_h)
     insight_box = (table_box[2] + gap, bottom_top, width - margin, bottom_top + insight_panel_h)
     _panel(draw, table_box, radius=13, shadow=False)
@@ -1038,7 +1038,7 @@ def generate_dashboard_png(
         _draw_centered(draw, (table_box[0], header_bottom, table_box[2], header_bottom+table_row_h), "Nenhum dado no recorte", FONTS.get(10), P.muted)
 
     _draw_bulb_mark(draw, insight_box[0] + 13, bottom_top + 8)
-    content_x = insight_box[0] + 78
+    content_x = insight_box[0] + 68
     draw.text((content_x, bottom_top+17), "INSIGHTS / ALERTAS", font=FONTS.get(18, True), fill=P.teal)
     shown_insights = normalized_insights[:5]
     if not shown_insights:
@@ -1049,13 +1049,13 @@ def generate_dashboard_png(
             separator_y = top - 4
             for dash_x in range(content_x, insight_box[2] - 16, 6):
                 draw.line((dash_x, separator_y, min(dash_x + 2, insight_box[2] - 16), separator_y), fill=P.line)
-        _insight_icon(draw, content_x, top+5, insight.kind)
-        text_x = content_x + 34
-        text_w = insight_box[2]-text_x-18
+        _insight_icon(draw, content_x, top+7, insight.kind)
+        text_x = content_x + 32
+        text_w = insight_box[2]-text_x-14
         full = f"{insight.title}: {insight.text}".rstrip(": ")
-        lines = _wrap(draw, full, FONTS.get(11, False), text_w, 3)
+        lines = _wrap(draw, full, FONTS.get(12, False), text_w, 4)
         for line_no, line in enumerate(lines):
-            draw.text((text_x, top + 3 + line_no*14), line, font=FONTS.get(11, False), fill=P.ink)
+            draw.text((text_x, top + 3 + line_no*15), line, font=FONTS.get(12, False), fill=P.ink)
 
     # Rodapé explicativo.
     foot_top = bottom_top + bottom_h + 13
