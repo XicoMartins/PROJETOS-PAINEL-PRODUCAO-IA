@@ -223,6 +223,8 @@ table .status-pill { min-width: 94px; border: 0; background: transparent; justif
 .entries-back { flex: none; padding: 10px 15px; border: 1px solid var(--line); border-radius: 9px; color: var(--navy); background: white; font-weight: 800; text-decoration: none; }
 .entries-card, .entries-message { max-width: 1800px; margin: 0 auto 16px; border: 1px solid var(--line); border-radius: 12px; background: white; box-shadow: 0 3px 10px #15395b0c; }
 .entries-message { padding: 22px; }
+.entries-message form { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.entries-delete { padding: 9px 13px; border: 1px solid #d9364f; border-radius: 8px; color: white; background: #d9364f; font: inherit; font-weight: 800; cursor: pointer; }
 .entries-card-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 17px 19px; border-bottom: 1px solid var(--line); }
 .entries-card-head h2 { margin: 0; color: var(--navy); font-size: 17px; }
 .entries-card-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
@@ -241,6 +243,7 @@ table .status-pill { min-width: 94px; border: 0; background: transparent; justif
 @media (max-width: 760px) {
   .entries-page { padding: 16px; }
   .entries-header, .entries-card-head { align-items: flex-start; flex-direction: column; }
+  .entries-message form { align-items: flex-start; flex-direction: column; }
   .entries-totals { width: 100%; }
   .entries-totals span { min-width: 0; flex: 1; }
 }
