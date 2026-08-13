@@ -104,15 +104,6 @@ export default async function PaintingEntriesAudit() {
 
       {error ? <section className="entries-message"><strong>Não foi possível abrir os lançamentos.</strong><br />{error}</section> : null}
       {!error && entries.length === 0 ? <section className="entries-message">Nenhum lançamento correspondente foi encontrado.</section> : null}
-      {!error && entries.some((entry) => String(entry.id) === "78") ? (
-        <section className="entries-message">
-          <form action="/api/painting-entries/78" method="post">
-            <strong>Duplicidade validada:</strong> o ID 78 repete o envio de 180 peças do ID 76.
-            <button className="entries-delete" type="submit">Excluir lançamento ID 78</button>
-          </form>
-        </section>
-      ) : null}
-
       {!error && entries.length > 0 && PROJECTS.map((project) => {
         const rows = entries.filter((entry) => entry.projeto_auditoria === project);
         const totalSent = rows.filter((entry) => movement(entry.processo, entry.maquinario) === "Envio").reduce((sum, entry) => sum + Number(entry.quantidade ?? 0), 0);
