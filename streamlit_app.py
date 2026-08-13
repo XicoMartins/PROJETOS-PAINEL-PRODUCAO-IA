@@ -182,8 +182,12 @@ CSS = """
   .summary-table th:first-child, .summary-table td:first-child { text-align: left; }
   .summary-table td { padding: 7px 6px; border-bottom: 1px solid #e5ecf2; text-align: center; line-height: 1.35; }
   .summary-table td.total-value { background: #f0f8fb; color: var(--navy); font-weight: 900; }
-  .summary-table tbody tr:nth-child(even) { background: #f7fafc; }
+  .summary-table .summary-display-row { background: #fff; }
+  .summary-table .summary-process-row { background: #f2f7fa; color: #385271; }
+  .summary-table .summary-process-row td:first-child { padding-left: 43px; font-weight: 800; }
+  .summary-table .summary-process-row td.total-value { background: #eaf4f8; }
   .summary-name { font-weight: 800; color: var(--ink); }
+  .summary-branch { margin-right: 8px; color: var(--teal); font-weight: 900; }
   .insights {
     position: relative; align-self: start; height: fit-content; min-height: 0;
     padding: 8px 14px 8px 82px; border: 1.5px solid var(--teal); border-radius: 9px;
@@ -283,12 +287,21 @@ class Entry:
     numero_display: str
     codigo_pintura: str
     color: str
+    process_name: str
     updated_at: datetime
+
+
+@dataclass
+class ProcessVolume:
+    name: str
+    sent_quantity: float
+    returned_quantity: float
 
 
 @dataclass
 class Project:
     name: str
+    processes: list[ProcessVolume]
     sent_dates: list[date]
     return_dates: list[date]
     sent_day_count: int
@@ -346,6 +359,15 @@ def movement_from_process(process: object, machinery: object = "") -> str | None
     if "ENVIO" in machinery_key or "REMESSA" in machinery_key:
         return "remessa"
     return None
+
+
+def process_name(value: object, color: str = "") -> str:
+    label = re.sub(r"\b(?:ENVIO|REMESSA|RETORNO)\b", " ", str(value or ""), flags=re.I)
+    label = re.sub(r"[-–—]+", " ", label)
+    label = re.sub(r"\s+", " ", label).strip()
+    if color:
+        label = re.sub(rf"\s+{re.escape(color)}$", "", label, flags=re.I).strip()
+    return label.upper() or "PROCESSO NÃO INFORMADO"
 
 
 def number_value(value: object) -> float:
@@ -428,6 +450,10 @@ def build_projects(
                 numero_display=str(row.get("numero_display") or "").strip(),
                 codigo_pintura=str(row.get("codigo_pintura") or "").strip(),
                 color=painting_code_parts(row.get("codigo_pintura"))[1],
+                process_name=process_name(
+                    row.get("processo"),
+                    painting_code_parts(row.get("codigo_pintura"))[1],
+                ),
                 updated_at=parse_datetime(row.get("timestamp") or row.get("created_at"), occurred_on),
             )
         )
@@ -473,6 +499,23 @@ def build_projects(
         returned_total = sum(entry.quantity for entry in returned)
         total_sent = sum(entry.quantity for entry in all_entries if entry.movement == "remessa")
         total_returned = sum(entry.quantity for entry in all_entries if entry.movement == "retorno")
+        process_totals: dict[str, dict[str, object]] = {}
+        for entry in all_entries:
+            key = normalize(entry.process_name)
+            current = process_totals.setdefault(
+                key,
+                {"name": entry.process_name, "sent": 0.0, "returned": 0.0},
+            )
+            quantity_key = "sent" if entry.movement == "remessa" else "returned"
+            current[quantity_key] = float(current[quantity_key]) + entry.quantity
+        processes = [
+            ProcessVolume(
+                name=str(values["name"]),
+                sent_quantity=float(values["sent"]),
+                returned_quantity=float(values["returned"]),
+            )
+            for values in sorted(process_totals.values(), key=lambda item: normalize(item["name"]))
+        ]
         if returned and not sent:
             status = "Parcial"
         elif not returned:
@@ -488,6 +531,7 @@ def build_projects(
         projects.append(
             Project(
                 name=name,
+                processes=processes,
                 sent_dates=sent_dates,
                 return_dates=return_dates,
                 sent_day_count=len(sent_dates),
@@ -523,6 +567,14 @@ def status_html(status: str) -> str:
     if status == "Parcial":
         return '<span class="status status-partial">◷ Parcial</span>'
     return '<span class="status status-none">× Sem retorno</span>'
+
+
+def process_status(sent_quantity: float, returned_quantity: float) -> str:
+    if returned_quantity <= 0:
+        return "Sem retorno"
+    if sent_quantity > 0 and returned_quantity < sent_quantity:
+        return "Parcial"
+    return "Concluído"
 
 
 def connector_html(day: date, event_dates: list[date], movement: str) -> str:
@@ -731,7 +783,7 @@ def render_dashboard(
         weekly_sent = format_quantity(project.sent_quantity / weeks_in_period)
         weekly_return = format_quantity(project.returned_quantity / weeks_in_period)
         summary_rows.append(
-            f"<tr><td class='summary-name'><span class='tl-index'>{index}</span>{safe(project.name)}</td>"
+            f"<tr class='summary-display-row'><td class='summary-name'><span class='tl-index'>{index}</span>{safe(project.name)}</td>"
             f"<td>{project.sent_day_count}</td>"
             f"<td class='total-value'>{format_quantity(project.total_sent_quantity)}</td>"
             f"<td class='total-value'>{format_quantity(project.total_returned_quantity)}</td>"
@@ -740,6 +792,17 @@ def render_dashboard(
             f"<td>{first_return}</td><td>{conclusion}</td>"
             f"<td>{status_html(project.status)}</td></tr>"
         )
+        for process in project.processes:
+            summary_rows.append(
+                f"<tr class='summary-process-row'>"
+                f"<td><span class='summary-branch'>└</span>{safe(process.name)}</td>"
+                f"<td>—</td>"
+                f"<td class='total-value'>{format_quantity(process.sent_quantity)}</td>"
+                f"<td class='total-value'>{format_quantity(process.returned_quantity)}</td>"
+                f"<td>—</td><td>—</td><td>—</td><td>—</td>"
+                f"<td>{status_html(process_status(process.sent_quantity, process.returned_quantity))}</td>"
+                f"</tr>"
+            )
 
     insight_rows = smart_insights(projects, timeline)
     insight_classes = {
@@ -777,7 +840,7 @@ def render_dashboard(
         <section class="panel">
           <div class="summary-table-wrap">
             <table class="summary-table">
-              <thead><tr><th>Projeto</th><th>Dias Rem.</th><th class="total-col">Enviado total</th><th class="total-col">Retornado total</th><th>Env./sem.</th><th>Ret./sem.</th><th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>
+              <thead><tr><th>Display / Processo</th><th>Dias Rem.</th><th class="total-col">Enviado total</th><th class="total-col">Retornado total</th><th>Env./sem.</th><th>Ret./sem.</th><th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>
               <tbody>{''.join(summary_rows)}</tbody>
             </table>
           </div>
@@ -792,6 +855,7 @@ def render_dashboard(
         <div><strong>Env./sem.</strong> = quantidade líquida enviada ÷ semanas ISO do filtro.</div>
         <div><strong>Ret./sem.</strong> = quantidade líquida retornada ÷ semanas ISO do filtro.</div>
         <div><strong>Totais</strong> = soma de todos os envios e retornos do item, independentemente do período.</div>
+        <div><strong>Processos</strong> = detalhamento dos volumes totais enviados e retornados dentro de cada Display.</div>
         <div><strong>Base semanal</strong> = projetos visíveis; cada semana ISO parcial conta como uma semana.</div>
         <div><strong>1º Ret.</strong> = dias corridos entre a primeira remessa e o primeiro retorno.</div>
         <div><strong>Conclusão</strong> = dias corridos entre a primeira remessa e o último retorno.</div>

@@ -64,10 +64,20 @@ class Metric:
 
 
 @dataclass(frozen=True)
+class ProcessRow:
+    """Volumes históricos de um processo pertencente a um Display."""
+
+    name: str
+    sent_quantity: float = 0
+    returned_quantity: float = 0
+
+
+@dataclass(frozen=True)
 class ProjectRow:
     """Dados necessários para uma linha da linha do tempo e da tabela."""
 
     name: str
+    processes: tuple[ProcessRow, ...] = ()
     sent_dates: tuple[date, ...] = ()
     return_dates: tuple[date, ...] = ()
     sent_day_count: int = 0
@@ -210,9 +220,23 @@ def _normalize_projects(projects: Sequence[Any]) -> list[ProjectRow]:
         sent_days = _field(item, "sent_day_count", "dias_remessa", default=len(sent))
         first_return = _field(item, "first_return_days", "primeiro_retorno_dias")
         conclusion = _field(item, "conclusion_days", "conclusao_dias")
+        raw_processes = _field(item, "processes", "processos", default=()) or ()
+        processes = tuple(
+            ProcessRow(
+                name=str(_field(process, "name", "processo", default="Processo não informado")),
+                sent_quantity=_number(
+                    _field(process, "sent_quantity", "quantidade_enviada", "enviado_total")
+                ) or 0,
+                returned_quantity=_number(
+                    _field(process, "returned_quantity", "quantidade_retornada", "retornado_total")
+                ) or 0,
+            )
+            for process in raw_processes
+        )
         result.append(
             ProjectRow(
                 name=str(_field(item, "name", "projeto", "project", default="Projeto sem nome")),
+                processes=processes,
                 sent_dates=sent,
                 return_dates=returned,
                 sent_day_count=int(sent_days or 0),
@@ -755,7 +779,8 @@ def generate_dashboard_png(
     timeline_h = timeline_title_h + timeline_header_h + max(1, len(normalized_projects)) * timeline_row_h + 13
     table_header_h = 38
     table_row_h = 32
-    table_h = table_header_h + max(1, len(normalized_projects)) * table_row_h + 4
+    table_row_count = sum(1 + len(project.processes) for project in normalized_projects)
+    table_h = table_header_h + max(1, table_row_count) * table_row_h + 4
     insight_row_h = 44
     insight_h = 50 + max(1, min(5, len(normalized_insights))) * insight_row_h + 6
     table_panel_h = max(205, table_h)
@@ -922,13 +947,13 @@ def generate_dashboard_png(
     )
     if weekly:
         columns = [
-            ("Projeto", .34), ("Dias", .06), ("Env. total", .09), ("Ret. total", .09),
+            ("Display / Processo", .34), ("Dias", .06), ("Env. total", .09), ("Ret. total", .09),
             ("Env./sem.", .08), ("Ret./sem.", .08), ("1º Ret.", .07),
             ("Conclusão", .08), ("Status", .11),
         ]
     else:
         columns = [
-            ("Projeto", .40), ("Dias", .08), ("Env. total", .12), ("Ret. total", .12),
+            ("Display / Processo", .40), ("Dias", .08), ("Env. total", .12), ("Ret. total", .12),
             ("1º Ret.", .09), ("Conclusão", .09), ("Status", .12),
         ]
     total_ratio = sum(ratio for _, ratio in columns)
@@ -945,38 +970,69 @@ def generate_dashboard_png(
         else:
             _draw_centered(draw, (cursor, bottom_top, cursor+col_w, header_bottom), label, FONTS.get(10, True), "white")
         cursor += col_w
-    for row_index, project in enumerate(normalized_projects):
+    table_rows: list[tuple[str, Any, int]] = []
+    for display_index, project in enumerate(normalized_projects, 1):
+        table_rows.append(("display", project, display_index))
+        table_rows.extend(("process", process, display_index) for process in project.processes)
+
+    for row_index, (row_kind, item, display_index) in enumerate(table_rows):
         top = header_bottom + row_index * table_row_h
         bottom = top + table_row_h
-        if row_index % 2:
+        if row_kind == "process":
+            draw.rectangle((table_box[0]+1, top, table_box[2]-1, bottom), fill="#F2F7FA")
+        elif row_index % 2:
             draw.rectangle((table_box[0]+1, top, table_box[2]-1, bottom), fill="#F7FAFC")
         draw.line((table_box[0], bottom, table_box[2], bottom), fill=P.line, width=1)
-        values: list[Any] = [
-            project.name,
-            project.sent_day_count,
-            _format_number(project.total_sent_quantity),
-            _format_number(project.total_returned_quantity),
-        ]
-        if weekly:
-            values.extend([_format_number(project.sent_per_week), _format_number(project.return_per_week)])
-        values.extend([
-            _day_text(project.first_return_days),
-            _day_text(project.conclusion_days, incomplete=True),
-            project.status,
-        ])
+        if row_kind == "display":
+            project = item
+            values: list[Any] = [
+                project.name,
+                project.sent_day_count,
+                _format_number(project.total_sent_quantity),
+                _format_number(project.total_returned_quantity),
+            ]
+            if weekly:
+                values.extend([_format_number(project.sent_per_week), _format_number(project.return_per_week)])
+            values.extend([
+                _day_text(project.first_return_days),
+                _day_text(project.conclusion_days, incomplete=True),
+                project.status,
+            ])
+        else:
+            process = item
+            status = (
+                "Sem retorno" if process.returned_quantity <= 0
+                else "Parcial" if process.sent_quantity > 0 and process.returned_quantity < process.sent_quantity
+                else "Concluído"
+            )
+            values = [
+                process.name,
+                "—",
+                _format_number(process.sent_quantity),
+                _format_number(process.returned_quantity),
+            ]
+            if weekly:
+                values.extend(["—", "—"])
+            values.extend(["—", "—", status])
         cursor = table_box[0]
         for col_index, (value, col_w) in enumerate(zip(values, widths)):
             if col_index == 0:
-                circle = (cursor+9, top+5, cursor+26, top+22)
-                draw.ellipse(circle, fill=P.navy)
-                _draw_centered(draw, circle, row_index+1, FONTS.get(8, True), "white")
                 font = FONTS.get(10, True)
-                text = _ellipsize(draw, value, font, col_w-39)
-                draw.text((cursor+32, top+11), text, font=font, fill=P.ink)
+                if row_kind == "display":
+                    circle = (cursor+9, top+5, cursor+26, top+22)
+                    draw.ellipse(circle, fill=P.navy)
+                    _draw_centered(draw, circle, display_index, FONTS.get(8, True), "white")
+                    text = _ellipsize(draw, value, font, col_w-39)
+                    draw.text((cursor+32, top+11), text, font=font, fill=P.ink)
+                else:
+                    draw.text((cursor+31, top+10), "└", font=font, fill=P.teal)
+                    text = _ellipsize(draw, value, font, col_w-55)
+                    draw.text((cursor+47, top+11), text, font=font, fill="#385271")
             elif col_index == len(values)-1:
                 _draw_status(draw, (int(cursor), top, int(cursor+col_w), bottom), str(value), compact=True)
             else:
-                _draw_centered(draw, (cursor, top, cursor+col_w, bottom), value, FONTS.get(10, False), P.ink)
+                color = "#385271" if row_kind == "process" else P.ink
+                _draw_centered(draw, (cursor, top, cursor+col_w, bottom), value, FONTS.get(10, False), color)
             cursor += col_w
     if not normalized_projects:
         _draw_centered(draw, (table_box[0], header_bottom, table_box[2], header_bottom+table_row_h), "Nenhum dado no recorte", FONTS.get(10), P.muted)
@@ -1011,6 +1067,7 @@ def generate_dashboard_png(
     footnotes = [
         ("Dias Rem.", "datas com remessa registrada."),
         ("Totais", "soma histórica do item, independentemente do filtro."),
+        ("Processos", "volumes totais detalhados dentro de cada Display."),
         ("Env./sem.", "volume enviado ÷ semanas ISO do filtro."),
         ("Ret./sem.", "volume retornado ÷ semanas ISO do filtro."),
         ("Base semanal", "cada semana ISO parcial conta como uma semana."),
@@ -1131,6 +1188,7 @@ __all__ = [
     "build_dashboard_png",
     "Insight",
     "Metric",
+    "ProcessRow",
     "ProjectRow",
     "generate_dashboard_png",
     "save_dashboard_png",
