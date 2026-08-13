@@ -1,0 +1,12 @@
+[
+  { "abbreviation": "AM", "color": "AMARELO", "reference": "Regra histórica colorCode e códigos AM - 0040 / AM - 0261", "sampleCode": "AM - 0040", "sampleLot": "40", "hex": "#F4C430", "notes": "Cor simples" },
+  { "abbreviation": "AZ", "color": "AZUL", "reference": "Regra histórica colorCode", "sampleCode": "AZ - 0010", "sampleLot": "10", "hex": "#2F75B5", "notes": "Cor simples" },
+  { "abbreviation": "BD", "color": "BORDO", "reference": "Regra histórica colorCode e código BD - 0054", "sampleCode": "BD - 0054", "sampleLot": "54", "hex": "#800020", "notes": "Também usado para referências descritas como damasco no histórico" },
+  { "abbreviation": "BR", "color": "BRANCO", "reference": "Regra histórica colorCode", "sampleCode": "BR - 0010", "sampleLot": "10", "hex": "#FFFFFF", "notes": "Cor simples" },
+  { "abbreviation": "LJ", "color": "LARANJA", "reference": "Regra histórica colorCode", "sampleCode": "LJ - 0010", "sampleLot": "10", "hex": "#ED7D31", "notes": "Cor simples" },
+  { "abbreviation": "MR", "color": "MARROM", "reference": "Regra histórica colorCode e código MR - 0085", "sampleCode": "MR - 0085", "sampleLot": "85", "hex": "#7F6000", "notes": "Cor simples" },
+  { "abbreviation": "PR", "color": "PRETO", "reference": "Regra histórica colorCode e códigos PR - 0185 / PR - 0322", "sampleCode": "PR - 0185", "sampleLot": "185", "hex": "#1F1F1F", "notes": "Preto liso" },
+  { "abbreviation": "PT", "color": "PRETO TEXTURIZADO", "reference": "Regra histórica colorCode para descrições PRETO + TEXT", "sampleCode": "PT - 0010", "sampleLot": "10", "hex": "#404040", "notes": "Acabamento texturizado" },
+  { "abbreviation": "PV", "color": "PRETO/VERMELHO", "reference": "Regra histórica colorCode para descrições PRETO + VERMELHO", "sampleCode": "PV - 0010", "sampleLot": "10", "hex": "#7A1F2B", "notes": "Combinação de cores" },
+  { "abbreviation": "VM", "color": "VERMELHO", "reference": "Regra histórica colorCode e códigos VM - 0211 / VM - 0476 / VM - 1500", "sampleCode": "VM - 0476", "sampleLot": "476", "hex": "#C00000", "notes": "Cor simples" }
+]

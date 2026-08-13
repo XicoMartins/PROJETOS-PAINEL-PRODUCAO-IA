@@ -14,7 +14,7 @@ async function render() {
   );
 }
 
-test("server-renders the painting dashboard with today's totals", async () => {
+test("server-renders the painting dashboard with project totals", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
@@ -22,23 +22,23 @@ test("server-renders the painting dashboard with today's totals", async () => {
   const html = await response.text();
   assert.match(html, /<title>Relatório Gerencial Consolidado — Pintura MTECH<\/title>/i);
   assert.match(html, /Linha do tempo — remessas e retornos por projeto/i);
-  assert.match(html, /Enviado hoje/i);
-  assert.match(html, /Retornado hoje/i);
+  assert.match(html, /Enviado total/i);
+  assert.match(html, /Retornado total/i);
   assert.match(html, /independentemente do período/i);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape/i);
 });
 
-test("keeps daily totals independent from the visible-period fields", async () => {
+test("keeps project totals independent from the visible-period fields", async () => {
   const [page, data, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/data/painting-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /project\.sentToday \?\? 0/);
-  assert.match(page, /project\.returnedToday \?\? 0/);
-  assert.match(data, /todayKeyInSaoPaulo/);
-  assert.match(data, /isoDateKey\(entry\.date\) === todayKey/);
-  assert.match(styles, /\.today-heading/);
-  assert.match(styles, /\.today-value/);
+  assert.match(page, /project\.totalSent \?\? 0/);
+  assert.match(page, /project\.totalReturned \?\? 0/);
+  assert.match(data, /totalSent = remittanceEntries\.reduce/);
+  assert.match(data, /totalReturned = returnEntries\.reduce/);
+  assert.match(styles, /\.total-heading/);
+  assert.match(styles, /\.total-value/);
 });

@@ -145,10 +145,10 @@ main { min-height: 100vh; padding: 18px; }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; min-width: 960px; border-collapse: collapse; font-size: 12px; }
 th { padding: 7px 10px; color: white; background: var(--navy); font-weight: 700; }
-.today-heading { background: #086681; }
+.total-heading { background: #086681; }
 th + th, td + td { border-left: 1px solid #dfe5e9; }
 td { height: 31px; padding: 4px 9px; border-bottom: 1px solid #e7ecef; text-align: center; white-space: nowrap; }
-.today-value { color: var(--navy); background: #f0f8fb; font-weight: 800; }
+.total-value { color: var(--navy); background: #f0f8fb; font-weight: 800; }
 td:first-child { display: flex; align-items: center; gap: 8px; text-align: left; }
 .table-number { width: 18px; height: 18px; flex-basis: 18px; font-size: 10px; }
 table .status-pill { min-width: 94px; border: 0; background: transparent; justify-content: flex-start; padding: 2px 4px; }

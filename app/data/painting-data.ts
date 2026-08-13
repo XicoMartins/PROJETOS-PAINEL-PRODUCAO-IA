@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Client } from "pg";
+import paintingColors from "./painting-colors.json";
 import {
   paintProjects as sampleProjects,
   timelineDates as sampleTimelineDates,
@@ -88,21 +89,6 @@ function formatDateKey(date: Date) {
   return `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function todayKeyInSaoPaulo() {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function isoDateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
-}
-
 function movementFromProcess(process: string, machinery: string): Movement | null {
   const key = normalized(process);
   if (key.includes("RETORNO")) return "retorno";
@@ -113,13 +99,25 @@ function movementFromProcess(process: string, machinery: string): Movement | nul
   return null;
 }
 
-function colorFromProcess(process: string) {
-  const color = process
-    .replace(/^.*?\b(?:ENVIO|REMESSA|RETORNO)\b\s*[-:–—]?\s*/i, "")
-    .trim();
-  return color === process && process.includes(" - ")
-    ? process.split(" - ").at(-1)?.trim() || "SEM COR"
-    : color || "SEM COR";
+const PAINTING_COLOR_BY_ABBREVIATION = new Map(
+  paintingColors.map(({ abbreviation, color }) => [abbreviation, color]),
+);
+
+function paintingCodeParts(code: string) {
+  const value = cleanText(code).toUpperCase();
+  const match = value.match(/^([A-Z]{2})(?=\s*[-–—:/.]|\s|\d|$)/);
+  const abbreviation = match?.[1] ?? "";
+  const rawLot = match
+    ? value.slice(match[0].length).replace(/^\s*[-–—:/.]?\s*/, "").trim()
+    : value;
+  const lot = /^\d+$/.test(rawLot) ? rawLot.replace(/^0+(?=\d)/, "") : rawLot;
+  const mappedColor = abbreviation ? PAINTING_COLOR_BY_ABBREVIATION.get(abbreviation) : undefined;
+
+  return {
+    abbreviation,
+    color: mappedColor ?? (abbreviation ? `COR NÃO CADASTRADA (${abbreviation})` : "SEM COR"),
+    lot,
+  };
 }
 
 function numberValue(value: number | string | null) {
@@ -170,7 +168,7 @@ function parseRows(rows: RawPaintingEntry[]) {
       display: cleanText(row.display).replace(/\s*-\s*lote.*$/i, "").trim(),
       numeroDisplay: cleanText(row.numero_display),
       codigoPintura: cleanText(row.codigo_pintura),
-      color: colorFromProcess(process),
+      color: paintingCodeParts(cleanText(row.codigo_pintura)).color,
       updatedAt: Number.isNaN(updatedAt.valueOf()) ? date : updatedAt,
     }];
   });
@@ -206,7 +204,6 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
     .slice(0, maxProjects)
     .sort((left, right) => Math.min(...left.map((entry) => entry.date.valueOf())) - Math.min(...right.map((entry) => entry.date.valueOf())));
 
-  const todayKey = todayKeyInSaoPaulo();
   const projects = selectedGroups.map<PaintProject>((entries) => {
     const remittanceEntries = entries.filter((entry) => entry.movement === "remessa");
     const returnEntries = entries.filter((entry) => entry.movement === "retorno");
@@ -226,23 +223,22 @@ function buildDashboard(rows: RawPaintingEntry[]): PaintingDashboardData | null 
     );
     const totalSent = remittanceEntries.reduce((sum, entry) => sum + entry.quantity, 0);
     const totalReturned = returnEntries.reduce((sum, entry) => sum + entry.quantity, 0);
-    const sentToday = remittanceEntries
-      .filter((entry) => isoDateKey(entry.date) === todayKey)
-      .reduce((sum, entry) => sum + entry.quantity, 0);
-    const returnedToday = returnEntries
-      .filter((entry) => isoDateKey(entry.date) === todayKey)
-      .reduce((sum, entry) => sum + entry.quantity, 0);
     const hasReturn = returnEntries.length > 0;
     const isPartial = hasReturn && totalSent > 0 && totalReturned < totalSent;
     const reference = entries[0];
 
     return {
-      name: uniqueParts([reference.cliente, reference.display, reference.color, reference.codigoPintura]).join(" "),
+      name: uniqueParts([
+        reference.cliente,
+        reference.display,
+        reference.color,
+        paintingCodeParts(reference.codigoPintura).lot,
+      ]).join(" "),
       remessas: remittanceDates,
       retornos: returnDates,
       remittanceDayCount: remittanceDates.length,
-      sentToday,
-      returnedToday,
+      totalSent,
+      totalReturned,
       firstReturnDays: firstRemittance && firstReturn ? daysBetween(firstRemittance, firstReturn) : undefined,
       conclusionDays: firstRemittance && lastReturn ? daysBetween(firstRemittance, lastReturn) : undefined,
       status: !hasReturn ? "Sem retorno" : isPartial ? "Parcial" : "Concluído",

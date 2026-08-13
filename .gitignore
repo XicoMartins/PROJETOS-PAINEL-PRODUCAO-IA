@@ -43,6 +43,7 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+/.codex-work/
 /Controle PINTURA Anisio 2026.xlsx
 /.tmp-ppt-reference/
 /.cache/

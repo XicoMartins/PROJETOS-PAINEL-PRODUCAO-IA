@@ -78,8 +78,8 @@ class ProjectRow:
     return_per_week: float | None = None
     sent_quantity: float | None = None
     returned_quantity: float | None = None
-    sent_today_quantity: float | None = None
-    returned_today_quantity: float | None = None
+    total_sent_quantity: float | None = None
+    total_returned_quantity: float | None = None
 
 
 @dataclass(frozen=True)
@@ -245,11 +245,11 @@ def _normalize_projects(projects: Sequence[Any]) -> list[ProjectRow]:
                 returned_quantity=_number(
                     _field(item, "returned_quantity", "quantidade_retornada", "total_retornado")
                 ),
-                sent_today_quantity=_number(
-                    _field(item, "sent_today_quantity", "enviado_hoje", "sent_today")
+                total_sent_quantity=_number(
+                    _field(item, "total_sent_quantity", "enviado_total", "sent_total")
                 ),
-                returned_today_quantity=_number(
-                    _field(item, "returned_today_quantity", "retornado_hoje", "returned_today")
+                total_returned_quantity=_number(
+                    _field(item, "total_returned_quantity", "retornado_total", "returned_total")
                 ),
             )
         )
@@ -922,13 +922,13 @@ def generate_dashboard_png(
     )
     if weekly:
         columns = [
-            ("Projeto", .34), ("Dias", .06), ("Env. hoje", .09), ("Ret. hoje", .09),
+            ("Projeto", .34), ("Dias", .06), ("Env. total", .09), ("Ret. total", .09),
             ("Env./sem.", .08), ("Ret./sem.", .08), ("1º Ret.", .07),
             ("Conclusão", .08), ("Status", .11),
         ]
     else:
         columns = [
-            ("Projeto", .40), ("Dias", .08), ("Env. hoje", .12), ("Ret. hoje", .12),
+            ("Projeto", .40), ("Dias", .08), ("Env. total", .12), ("Ret. total", .12),
             ("1º Ret.", .09), ("Conclusão", .09), ("Status", .12),
         ]
     total_ratio = sum(ratio for _, ratio in columns)
@@ -954,8 +954,8 @@ def generate_dashboard_png(
         values: list[Any] = [
             project.name,
             project.sent_day_count,
-            _format_number(project.sent_today_quantity),
-            _format_number(project.returned_today_quantity),
+            _format_number(project.total_sent_quantity),
+            _format_number(project.total_returned_quantity),
         ]
         if weekly:
             values.extend([_format_number(project.sent_per_week), _format_number(project.return_per_week)])
@@ -1010,7 +1010,7 @@ def generate_dashboard_png(
     _draw_centered(draw, info_circle, "i", FONTS.get(15, True), "white")
     footnotes = [
         ("Dias Rem.", "datas com remessa registrada."),
-        ("Hoje", "totais do dia atual, independentemente do filtro."),
+        ("Totais", "soma histórica do item, independentemente do filtro."),
         ("Env./sem.", "volume enviado ÷ semanas ISO do filtro."),
         ("Ret./sem.", "volume retornado ÷ semanas ISO do filtro."),
         ("Base semanal", "cada semana ISO parcial conta como uma semana."),
