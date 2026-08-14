@@ -15,6 +15,17 @@ import streamlit as st
 
 from dashboard_png import build_dashboard_png
 from painting_colors import painting_code_parts
+from painting_references import (
+    ReferenceCatalog,
+    ReferenceSnapshot,
+    complete_sets,
+    load_reference_catalog,
+    reference_key,
+    scan_reference_directory,
+)
+
+
+DEFAULT_PAINTING_LISTS_DIR = r"S:\PROJETOS EM ANDAMENTO\PAINEL DE CONTROLE MTECH\PROGRAMAS\PROJETOS - PAINEL PRODUÇÃO IA\planilhas_pintura"
 
 
 st.set_page_config(
@@ -178,12 +189,12 @@ CSS = """
   .summary-table-wrap { width: 100%; overflow-x: hidden; }
   .summary-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: 11px; }
   .summary-table th { background: var(--navy); color: white; padding: 8px 3px; text-align: center; line-height: 1.2; white-space: normal; }
-  .summary-table th:nth-child(1) { width: 37%; }
-  .summary-table th:nth-child(2) { width: 7%; }
-  .summary-table th:nth-child(3), .summary-table th:nth-child(4) { width: 9%; }
-  .summary-table th:nth-child(5), .summary-table th:nth-child(6), .summary-table th:nth-child(7) { width: 7%; }
-  .summary-table th:nth-child(8) { width: 8%; }
-  .summary-table th:nth-child(9) { width: 9%; }
+  .summary-table th:nth-child(1) { width: 31%; }
+  .summary-table th:nth-child(2) { width: 5%; }
+  .summary-table th:nth-child(3), .summary-table th:nth-child(5) { width: 8%; }
+  .summary-table th:nth-child(4), .summary-table th:nth-child(6) { width: 7%; }
+  .summary-table th:nth-child(7), .summary-table th:nth-child(8), .summary-table th:nth-child(10), .summary-table th:nth-child(11) { width: 7%; }
+  .summary-table th:nth-child(9) { width: 6%; }
   .summary-table th.total-col { background: #086681; }
   .summary-table th:first-child, .summary-table td:first-child { text-align: left; }
   .summary-table td { padding: 7px 3px; border-bottom: 1px solid #e5ecf2; text-align: center; line-height: 1.3; overflow-wrap: anywhere; }
@@ -194,6 +205,11 @@ CSS = """
   .summary-table .summary-process-row td.total-value { background: #eaf4f8; }
   .summary-name { font-weight: 800; color: var(--ink); }
   .summary-branch { margin-right: 8px; color: var(--teal); font-weight: 900; }
+  .reference-alert {
+    margin: 0 10px 10px; padding: 7px 9px; border: 1px solid #f3d79f; border-radius: 7px;
+    background: #fff6e5; color: #8a5810; font-size: 11px; line-height: 1.4; font-weight: 700;
+  }
+  .reference-alert strong { display: block; margin-bottom: 3px; }
   .insights {
     position: relative; align-self: start; height: fit-content; min-height: 0;
     padding: 9px 12px 9px 66px; border: 1.5px solid var(--teal); border-radius: 9px;
@@ -302,6 +318,8 @@ class ProcessVolume:
     name: str
     sent_quantity: float
     returned_quantity: float
+    sent_sets: int | None = None
+    returned_sets: int | None = None
 
 
 @dataclass
@@ -322,6 +340,9 @@ class Project:
     total_sent_quantity: float
     total_returned_quantity: float
     completion_rate: float
+    sent_sets: int | None = None
+    returned_sets: int | None = None
+    reference_warnings: tuple[str, ...] = ()
 
 
 def normalize(value: object) -> str:
@@ -396,6 +417,10 @@ def format_quantity(value: float) -> str:
     return formatted.replace(",", "#").replace(".", ",").replace("#", ".")
 
 
+def format_sets(value: int | None) -> str:
+    return "—" if value is None else str(value)
+
+
 def database_url() -> str:
     try:
         return str(st.secrets["DATABASE_URL"]).strip()
@@ -420,6 +445,11 @@ def load_rows(db_url: str) -> list[dict]:
             return list(cursor.fetchall())
 
 
+@st.cache_data(show_spinner=False)
+def load_reference_catalog_cached(snapshot: ReferenceSnapshot) -> ReferenceCatalog:
+    return load_reference_catalog(snapshot)
+
+
 def project_name(entry: Entry) -> str:
     client_label = re.sub(r"\s+COFFEE$", "", entry.cliente, flags=re.I)
     display_label = re.sub(r"^DISPLAY\s+", "", entry.display, flags=re.I)
@@ -433,6 +463,7 @@ def build_projects(
     selected_names: set[str] | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    references: ReferenceCatalog | None = None,
 ) -> tuple[list[Project], list[date]]:
     parsed: list[Entry] = []
     wanted = normalize(client_filter)
@@ -514,14 +545,44 @@ def build_projects(
             )
             quantity_key = "sent" if entry.movement == "remessa" else "returned"
             current[quantity_key] = float(current[quantity_key]) + entry.quantity
-        processes = [
-            ProcessVolume(
-                name=str(values["name"]),
-                sent_quantity=float(values["sent"]),
-                returned_quantity=float(values["returned"]),
+        project_reference_warnings: list[str] = []
+        processes: list[ProcessVolume] = []
+        for values in sorted(process_totals.values(), key=lambda item: normalize(item["name"])):
+            process_label = str(values["name"])
+            sent_qnt = (
+                references.quantities.get(reference_key(all_entries[0].display, process_label, "remessa"))
+                if references is not None else None
             )
-            for values in sorted(process_totals.values(), key=lambda item: normalize(item["name"]))
-        ]
+            returned_qnt = (
+                references.quantities.get(reference_key(all_entries[0].display, process_label, "retorno"))
+                if references is not None else None
+            )
+            sent_sets = complete_sets(float(values["sent"]), sent_qnt)
+            returned_sets = complete_sets(float(values["returned"]), returned_qnt)
+            if references is not None and sent_sets is None:
+                project_reference_warnings.append(f"{name} / {process_label}: QNT de envio ausente")
+            if references is not None and returned_sets is None:
+                project_reference_warnings.append(f"{name} / {process_label}: QNT de retorno ausente")
+            processes.append(
+                ProcessVolume(
+                    name=process_label,
+                    sent_quantity=float(values["sent"]),
+                    returned_quantity=float(values["returned"]),
+                    sent_sets=sent_sets,
+                    returned_sets=returned_sets,
+                )
+            )
+
+        sent_set_values = [process.sent_sets for process in processes]
+        returned_set_values = [process.returned_sets for process in processes]
+        project_sent_sets = (
+            min(value for value in sent_set_values if value is not None)
+            if sent_set_values and all(value is not None for value in sent_set_values) else None
+        )
+        project_returned_sets = (
+            min(value for value in returned_set_values if value is not None)
+            if returned_set_values and all(value is not None for value in returned_set_values) else None
+        )
         if returned and not sent:
             status = "Parcial"
         elif not returned:
@@ -552,6 +613,9 @@ def build_projects(
                 total_sent_quantity=total_sent,
                 total_returned_quantity=total_returned,
                 completion_rate=completion_rate,
+                sent_sets=project_sent_sets,
+                returned_sets=project_returned_sets,
+                reference_warnings=tuple(sorted(set(project_reference_warnings))),
             )
         )
 
@@ -725,6 +789,7 @@ def render_dashboard(
     timeline: list[date],
     report_year: int,
     updated_at: datetime,
+    reference_warnings: tuple[str, ...] = (),
 ) -> None:
     returned_projects = [project for project in projects if project.return_dates]
     avg_sent_days = mean(project.sent_day_count for project in projects) if projects else 0
@@ -792,7 +857,9 @@ def render_dashboard(
             f"<tr class='summary-display-row'><td class='summary-name'><span class='tl-index'>{index}</span>{safe(project.name)}</td>"
             f"<td>{project.sent_day_count}</td>"
             f"<td class='total-value'>{format_quantity(project.total_sent_quantity)}</td>"
+            f"<td>{format_sets(project.sent_sets)}</td>"
             f"<td class='total-value'>{format_quantity(project.total_returned_quantity)}</td>"
+            f"<td>{format_sets(project.returned_sets)}</td>"
             f"<td title='Base: {weeks_in_period} semana(s) ISO'>{weekly_sent}</td>"
             f"<td title='Base: {weeks_in_period} semana(s) ISO'>{weekly_return}</td>"
             f"<td>{first_return}</td><td>{conclusion}</td>"
@@ -804,7 +871,9 @@ def render_dashboard(
                 f"<td><span class='summary-branch'>└</span>{safe(process.name)}</td>"
                 f"<td>—</td>"
                 f"<td class='total-value'>{format_quantity(process.sent_quantity)}</td>"
+                f"<td>{format_sets(process.sent_sets)}</td>"
                 f"<td class='total-value'>{format_quantity(process.returned_quantity)}</td>"
+                f"<td>{format_sets(process.returned_sets)}</td>"
                 f"<td>—</td><td>—</td><td>—</td><td>—</td>"
                 f"<td>{status_html(process_status(process.sent_quantity, process.returned_quantity))}</td>"
                 f"</tr>"
@@ -826,6 +895,12 @@ def render_dashboard(
         f'<div><strong>{safe(title)}:</strong> {safe(text)}.</div></div>'
         for icon, title, text in insight_rows
     )
+    reference_alert = (
+        '<div class="reference-alert"><strong>Referências QNT pendentes</strong>'
+        + "<br>".join(safe(warning) for warning in reference_warnings)
+        + "</div>"
+        if reference_warnings else ""
+    )
 
     content = f"""
     <div class="report-shell report-canvas" id="painel-pintura-exportavel">
@@ -846,10 +921,11 @@ def render_dashboard(
         <section class="panel">
           <div class="summary-table-wrap">
             <table class="summary-table">
-              <thead><tr><th>Display / Processo</th><th>Dias Rem.</th><th class="total-col">Enviado total</th><th class="total-col">Retornado total</th><th>Env./sem.</th><th>Ret./sem.</th><th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>
+              <thead><tr><th>Display / Processo</th><th>Dias Rem.</th><th class="total-col">Enviado total</th><th>Conj. enviados</th><th class="total-col">Retornado total</th><th>Conj. retornados</th><th>Env./sem.</th><th>Ret./sem.</th><th>1º Ret.</th><th>Conclusão</th><th>Status</th></tr></thead>
               <tbody>{''.join(summary_rows)}</tbody>
             </table>
           </div>
+          {reference_alert}
         </section>
         <aside class="panel insights">
           <div class="insights-head"><span class="bulb-mark" aria-hidden="true"><i class="bulb-core"></i></span><h2>Insights / alertas</h2></div>
@@ -861,6 +937,7 @@ def render_dashboard(
         <div><strong>Env./sem.</strong> = quantidade líquida enviada ÷ semanas ISO do filtro.</div>
         <div><strong>Ret./sem.</strong> = quantidade líquida retornada ÷ semanas ISO do filtro.</div>
         <div><strong>Totais</strong> = soma de todos os envios e retornos do item, independentemente do período.</div>
+        <div><strong>Conjuntos</strong> = total histórico ÷ QNT; a linha do Display usa o menor resultado completo entre os processos.</div>
         <div><strong>Processos</strong> = detalhamento dos volumes totais enviados e retornados dentro de cada Display.</div>
         <div><strong>Base semanal</strong> = projetos visíveis; cada semana ISO parcial conta como uma semana.</div>
         <div><strong>1º Ret.</strong> = dias corridos entre a primeira remessa e o primeiro retorno.</div>
@@ -876,7 +953,9 @@ def render_dashboard(
 def dashboard_fragment() -> None:
     try:
         raw_rows = load_rows(database_url())
-        all_projects, all_timeline = build_projects(raw_rows)
+        reference_snapshot = scan_reference_directory(DEFAULT_PAINTING_LISTS_DIR)
+        reference_catalog = load_reference_catalog_cached(reference_snapshot)
+        all_projects, all_timeline = build_projects(raw_rows, references=reference_catalog)
         if not all_projects:
             st.markdown(
                 '<div class="empty"><h3>Nenhum lançamento de pintura encontrado</h3>'
@@ -943,6 +1022,7 @@ def dashboard_fragment() -> None:
             selected_names=selected_name_filter,
             start_date=effective_start,
             end_date=effective_end,
+            references=reference_catalog,
         )
         period_summary = (
             f'dia exato de {effective_start.strftime("%d/%m/%Y")}'
@@ -993,6 +1073,9 @@ def dashboard_fragment() -> None:
             timeline_dates,
             all_timeline[-1].year,
             report_updated_at,
+            tuple(sorted(set(reference_catalog.warnings).union(
+                warning for project in project_data for warning in project.reference_warnings
+            ))),
         )
     except Exception as exc:
         st.error(f"Não foi possível sincronizar o painel com o Formulário MTECH: {exc}")
