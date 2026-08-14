@@ -70,6 +70,8 @@ class ProcessRow:
     name: str
     sent_quantity: float = 0
     returned_quantity: float = 0
+    sent_sets: int | None = None
+    returned_sets: int | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,8 @@ class ProjectRow:
     returned_quantity: float | None = None
     total_sent_quantity: float | None = None
     total_returned_quantity: float | None = None
+    sent_sets: int | None = None
+    returned_sets: int | None = None
 
 
 @dataclass(frozen=True)
@@ -177,6 +181,11 @@ def _number(value: Any) -> float | None:
         return None
 
 
+def _set_count(value: Any) -> int | None:
+    number = _number(value)
+    return int(number) if number is not None else None
+
+
 def _normalize_metrics(metrics: Mapping[str, Any] | Sequence[Any]) -> list[Metric]:
     if isinstance(metrics, Mapping):
         source: Iterable[Any] = [
@@ -230,6 +239,8 @@ def _normalize_projects(projects: Sequence[Any]) -> list[ProjectRow]:
                 returned_quantity=_number(
                     _field(process, "returned_quantity", "quantidade_retornada", "retornado_total")
                 ) or 0,
+                sent_sets=_set_count(_field(process, "sent_sets")),
+                returned_sets=_set_count(_field(process, "returned_sets")),
             )
             for process in raw_processes
         )
@@ -275,6 +286,8 @@ def _normalize_projects(projects: Sequence[Any]) -> list[ProjectRow]:
                 total_returned_quantity=_number(
                     _field(item, "total_returned_quantity", "retornado_total", "returned_total")
                 ),
+                sent_sets=_set_count(_field(item, "sent_sets")),
+                returned_sets=_set_count(_field(item, "returned_sets")),
             )
         )
     return result
@@ -593,6 +606,70 @@ def _format_number(value: float | None) -> str:
     if value is None:
         return "—"
     return f"{value:.1f}".replace(".", ",")
+
+
+def _format_sets(value: int | None) -> str:
+    return "—" if value is None else str(int(value))
+
+
+def _summary_columns(weekly: bool) -> list[tuple[str, float]]:
+    if weekly:
+        return [
+            ("Display / Processo", .30), ("Dias", .05),
+            ("Env. total", .075), ("Conj. env.", .07),
+            ("Ret. total", .075), ("Conj. ret.", .07),
+            ("Env./sem.", .06), ("Ret./sem.", .06),
+            ("1º Ret.", .055), ("Conclusão", .065), ("Status", .12),
+        ]
+    return [
+        ("Display / Processo", .34), ("Dias", .06),
+        ("Env. total", .10), ("Conj. env.", .08),
+        ("Ret. total", .10), ("Conj. ret.", .08),
+        ("1º Ret.", .08), ("Conclusão", .08), ("Status", .08),
+    ]
+
+
+def _summary_values(
+    row_kind: str,
+    item: ProjectRow | ProcessRow,
+    weekly: bool,
+) -> list[Any]:
+    if row_kind == "display":
+        project = item
+        values = [
+            project.name,
+            project.sent_day_count,
+            _format_number(project.total_sent_quantity),
+            _format_sets(project.sent_sets),
+            _format_number(project.total_returned_quantity),
+            _format_sets(project.returned_sets),
+        ]
+        if weekly:
+            values.extend([_format_number(project.sent_per_week), _format_number(project.return_per_week)])
+        values.extend([
+            _day_text(project.first_return_days),
+            _day_text(project.conclusion_days, incomplete=True),
+            project.status,
+        ])
+        return values
+    process = item
+    status = (
+        "Sem retorno" if process.returned_quantity <= 0
+        else "Parcial" if process.sent_quantity > 0 and process.returned_quantity < process.sent_quantity
+        else "Concluído"
+    )
+    values = [
+        process.name,
+        "—",
+        _format_number(process.sent_quantity),
+        _format_sets(process.sent_sets),
+        _format_number(process.returned_quantity),
+        _format_sets(process.returned_sets),
+    ]
+    if weekly:
+        values.extend(["—", "—"])
+    values.extend(["—", "—", status])
+    return values
 
 
 def _weekly_projects(
@@ -945,17 +1022,7 @@ def generate_dashboard_png(
         project.sent_per_week is not None or project.return_per_week is not None
         for project in normalized_projects
     )
-    if weekly:
-        columns = [
-            ("Display / Processo", .34), ("Dias", .06), ("Env. total", .09), ("Ret. total", .09),
-            ("Env./sem.", .08), ("Ret./sem.", .08), ("1º Ret.", .07),
-            ("Conclusão", .08), ("Status", .11),
-        ]
-    else:
-        columns = [
-            ("Display / Processo", .40), ("Dias", .08), ("Env. total", .12), ("Ret. total", .12),
-            ("1º Ret.", .09), ("Conclusão", .09), ("Status", .12),
-        ]
+    columns = _summary_columns(weekly)
     total_ratio = sum(ratio for _, ratio in columns)
     widths = [(table_box[2] - table_box[0]) * ratio / total_ratio for _, ratio in columns]
     header_bottom = bottom_top + table_header_h
@@ -983,37 +1050,7 @@ def generate_dashboard_png(
         elif row_index % 2:
             draw.rectangle((table_box[0]+1, top, table_box[2]-1, bottom), fill="#F7FAFC")
         draw.line((table_box[0], bottom, table_box[2], bottom), fill=P.line, width=1)
-        if row_kind == "display":
-            project = item
-            values: list[Any] = [
-                project.name,
-                project.sent_day_count,
-                _format_number(project.total_sent_quantity),
-                _format_number(project.total_returned_quantity),
-            ]
-            if weekly:
-                values.extend([_format_number(project.sent_per_week), _format_number(project.return_per_week)])
-            values.extend([
-                _day_text(project.first_return_days),
-                _day_text(project.conclusion_days, incomplete=True),
-                project.status,
-            ])
-        else:
-            process = item
-            status = (
-                "Sem retorno" if process.returned_quantity <= 0
-                else "Parcial" if process.sent_quantity > 0 and process.returned_quantity < process.sent_quantity
-                else "Concluído"
-            )
-            values = [
-                process.name,
-                "—",
-                _format_number(process.sent_quantity),
-                _format_number(process.returned_quantity),
-            ]
-            if weekly:
-                values.extend(["—", "—"])
-            values.extend(["—", "—", status])
+        values = _summary_values(row_kind, item, weekly)
         cursor = table_box[0]
         for col_index, (value, col_w) in enumerate(zip(values, widths)):
             if col_index == 0:
@@ -1073,6 +1110,7 @@ def generate_dashboard_png(
         ("Base semanal", "cada semana ISO parcial conta como uma semana."),
         ("1º Ret.", "dias entre a primeira remessa e o primeiro retorno."),
         ("Conclusão", "dias entre a primeira remessa e o último retorno."),
+        ("Conjuntos", "total ÷ QNT; Display usa o menor processo."),
     ]
     foot_start = margin + 54
     foot_gap = 18

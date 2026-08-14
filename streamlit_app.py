@@ -1043,13 +1043,22 @@ def dashboard_fragment() -> None:
             )
             return
         report_updated_at = max(project.updated_at for project in all_projects)
+        reference_warnings = tuple(sorted(set(reference_catalog.warnings).union(
+            warning for project in project_data for warning in project.reference_warnings
+        )))
+        reference_insights = (
+            [("⚠", "Referências de conjuntos", "; ".join(reference_warnings))]
+            if reference_warnings
+            else []
+        )
+        png_insights = (reference_insights + smart_insights(project_data, timeline_dates))[:5]
         with download_column:
             st.markdown('<div class="toolbar-help">EXPORTAÇÃO</div>', unsafe_allow_html=True)
             try:
                 report_png = build_dashboard_png(
                     project_data,
                     timeline_dates,
-                    smart_insights(project_data, timeline_dates),
+                    png_insights,
                     report_year=all_timeline[-1].year,
                     updated_at=report_updated_at,
                     width=1920,
@@ -1076,9 +1085,7 @@ def dashboard_fragment() -> None:
             timeline_dates,
             all_timeline[-1].year,
             report_updated_at,
-            tuple(sorted(set(reference_catalog.warnings).union(
-                warning for project in project_data for warning in project.reference_warnings
-            ))),
+            reference_warnings,
         )
     except Exception as exc:
         st.error(f"Não foi possível sincronizar o painel com o Formulário MTECH: {exc}")
