@@ -5,6 +5,7 @@ import math
 import os
 import re
 import unicodedata
+from time import monotonic
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -26,6 +27,8 @@ from painting_references import (
 
 
 DEFAULT_PAINTING_LISTS_DIR = r"S:\PROJETOS EM ANDAMENTO\PAINEL DE CONTROLE MTECH\PROGRAMAS\PROJETOS - PAINEL PRODUÇÃO IA\planilhas_pintura"
+REFERENCE_CATALOG_CACHE_TTL_SECONDS = 30
+MAX_REFERENCE_ALERT_LINES = 5
 
 
 st.set_page_config(
@@ -445,8 +448,17 @@ def load_rows(db_url: str) -> list[dict]:
             return list(cursor.fetchall())
 
 
-@st.cache_data(show_spinner=False)
-def load_reference_catalog_cached(snapshot: ReferenceSnapshot) -> ReferenceCatalog:
+def reference_catalog_cache_epoch(now: float | None = None) -> int:
+    instant = monotonic() if now is None else now
+    return math.floor(instant / REFERENCE_CATALOG_CACHE_TTL_SECONDS)
+
+
+@st.cache_data(ttl=REFERENCE_CATALOG_CACHE_TTL_SECONDS, show_spinner=False)
+def load_reference_catalog_cached(
+    snapshot: ReferenceSnapshot,
+    cache_epoch: int,
+) -> ReferenceCatalog:
+    del cache_epoch
     return load_reference_catalog(snapshot)
 
 
@@ -910,9 +922,16 @@ def render_dashboard(
         f'<div><strong>{safe(title)}:</strong> {safe(text)}.</div></div>'
         for icon, title, text in insight_rows
     )
+    visible_reference_warnings = reference_warnings
+    if len(reference_warnings) > MAX_REFERENCE_ALERT_LINES:
+        visible_count = MAX_REFERENCE_ALERT_LINES - 1
+        visible_reference_warnings = (
+            *reference_warnings[:visible_count],
+            f"mais {len(reference_warnings) - visible_count} avisos",
+        )
     reference_alert = (
         '<div class="reference-alert"><strong>Referências QNT pendentes</strong>'
-        + "<br>".join(safe(warning) for warning in reference_warnings)
+        + "<br>".join(safe(warning) for warning in visible_reference_warnings)
         + "</div>"
         if reference_warnings else ""
     )
@@ -972,7 +991,10 @@ def dashboard_fragment() -> None:
             "MTECH_PAINTING_LISTS_DIR", DEFAULT_PAINTING_LISTS_DIR
         ).strip() or DEFAULT_PAINTING_LISTS_DIR
         reference_snapshot = scan_reference_directory(reference_directory)
-        reference_catalog = load_reference_catalog_cached(reference_snapshot)
+        reference_catalog = load_reference_catalog_cached(
+            reference_snapshot,
+            reference_catalog_cache_epoch(),
+        )
         all_projects, all_timeline = build_projects(raw_rows, references=reference_catalog)
         if not all_projects:
             st.markdown(

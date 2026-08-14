@@ -3,8 +3,14 @@ import unittest
 from datetime import datetime
 from unittest.mock import patch
 
-from painting_references import ReferenceCatalog, reference_key
-from streamlit_app import build_projects, dashboard_fragment, render_dashboard
+from painting_references import ReferenceCatalog, ReferenceSnapshot, reference_key
+import streamlit_app
+from streamlit_app import (
+    build_projects,
+    dashboard_fragment,
+    load_reference_catalog_cached,
+    render_dashboard,
+)
 
 
 def row(process: str, movement: str, quantity: int) -> dict:
@@ -79,6 +85,59 @@ class ProjectSetsTest(unittest.TestCase):
         self.assertIn("Conj. retornados", html)
         self.assertIn("arquivo &lt;sem QNT&gt;", html)
         self.assertNotIn("arquivo <sem QNT>", html)
+
+    def test_transient_reference_failure_is_not_cached_indefinitely(self):
+        snapshot = ReferenceSnapshot(r"D:\referencias-pintura", ())
+        transient = ReferenceCatalog({}, ("arquivo bloqueado",))
+        recovered = ReferenceCatalog({("DISPLAY", "BASE", "remessa"): 4})
+        ttl = streamlit_app.REFERENCE_CATALOG_CACHE_TTL_SECONDS
+
+        load_reference_catalog_cached.clear()
+        try:
+            with patch(
+                "streamlit_app.load_reference_catalog",
+                side_effect=[transient, recovered],
+            ) as loader:
+                first = load_reference_catalog_cached(
+                    snapshot, streamlit_app.reference_catalog_cache_epoch(0)
+                )
+                before_expiry = load_reference_catalog_cached(
+                    snapshot, streamlit_app.reference_catalog_cache_epoch(ttl - 0.001)
+                )
+                after_expiry = load_reference_catalog_cached(
+                    snapshot, streamlit_app.reference_catalog_cache_epoch(ttl)
+                )
+        finally:
+            load_reference_catalog_cached.clear()
+
+        self.assertEqual(first, before_expiry)
+        self.assertEqual(after_expiry.quantities, recovered.quantities)
+        self.assertEqual(after_expiry.warnings, ())
+        self.assertEqual(loader.call_count, 2)
+
+    def test_reference_alert_limits_many_warnings_and_keeps_panel_content(self):
+        projects, timeline = build_projects([row("ENVIO - BASE - PRETO", "Envio à Pintura", 9)])
+        warnings = tuple(
+            f"aviso {index} <arquivo>" for index in range(12)
+        )
+
+        with patch("streamlit_app.st.markdown") as markdown:
+            render_dashboard(
+                projects,
+                timeline,
+                2026,
+                datetime(2026, 8, 1, 8),
+                warnings,
+            )
+
+        html = markdown.call_args.args[0]
+        alert = html.split('<div class="reference-alert">', 1)[1].split("</div>", 1)[0]
+        self.assertIn("CLIENTE TESTE PRETO 1", html)
+        self.assertIn("aviso 0 &lt;arquivo&gt;", alert)
+        self.assertNotIn("aviso 0 <arquivo>", alert)
+        self.assertIn("mais 8 avisos", alert)
+        self.assertNotIn("aviso 11", alert)
+        self.assertEqual(alert.count("<br>"), 4)
 
     def test_reference_scan_uses_environment_directory_override(self):
         override = r"D:\referencias-pintura"
