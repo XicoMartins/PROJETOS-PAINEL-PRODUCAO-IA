@@ -44,6 +44,7 @@ next-env.d.ts
 /outputs/
 /work/
 /.codex-work/
+/.worktrees/
 /Controle PINTURA Anisio 2026.xlsx
 /.tmp-ppt-reference/
 /.cache/
