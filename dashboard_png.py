@@ -443,6 +443,25 @@ def _wrap(
     return lines
 
 
+def _insight_text_layout(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+    max_width: float,
+    row_height: int,
+) -> list[tuple[str, int]]:
+    """Quebra o texto sem ocupar a faixa reservada ao próximo separador."""
+
+    text_top = 3
+    line_height = 15
+    separator_top = row_height - 4
+    max_lines = max(1, (separator_top - text_top) // line_height)
+    return [
+        (line, text_top + line_no * line_height)
+        for line_no, line in enumerate(_wrap(draw, text, font, max_width, max_lines))
+    ]
+
+
 def _draw_centered(
     draw: ImageDraw.ImageDraw,
     box: tuple[float, float, float, float],
@@ -1090,9 +1109,10 @@ def generate_dashboard_png(
         text_x = content_x + 32
         text_w = insight_box[2]-text_x-14
         full = f"{insight.title}: {insight.text}".rstrip(": ")
-        lines = _wrap(draw, full, FONTS.get(12, False), text_w, 4)
-        for line_no, line in enumerate(lines):
-            draw.text((text_x, top + 3 + line_no*15), line, font=FONTS.get(12, False), fill=P.ink)
+        insight_font = FONTS.get(12, False)
+        lines = _insight_text_layout(draw, full, insight_font, text_w, insight_row_h)
+        for line, offset_y in lines:
+            draw.text((text_x, top + offset_y), line, font=insight_font, fill=P.ink)
 
     # Rodapé explicativo.
     foot_top = bottom_top + bottom_h + 13

@@ -1,15 +1,42 @@
 import unittest
 from datetime import date
 
+from PIL import Image, ImageDraw
+
 from dashboard_png import (
+    FONTS,
+    _insight_text_layout,
     _normalize_projects,
     _summary_columns,
     _summary_values,
     generate_dashboard_png,
 )
+from streamlit_app import _reference_png_insights
 
 
 class DashboardPngSetsTest(unittest.TestCase):
+    def test_bounds_multiple_reference_warnings_inside_fixed_insight_rows(self):
+        warnings = tuple(
+            f"DISPLAY TESTE PRETO 1 / PROCESSO {index}: QNT de retorno ausente"
+            for index in range(1, 7)
+        )
+
+        insights = _reference_png_insights(warnings)
+
+        self.assertEqual([item[2] for item in insights[:4]], list(warnings[:4]))
+        self.assertEqual(
+            insights[4],
+            ("⚠", "Referências de conjuntos", "Mais 2 avisos de referência."),
+        )
+
+        draw = ImageDraw.Draw(Image.new("RGB", (400, 100), "white"))
+        text = "Referências de conjuntos: " + warnings[0] * 3
+        layout = _insight_text_layout(draw, text, FONTS.get(12), 250, 54)
+
+        self.assertEqual(len(layout), 3)
+        self.assertLessEqual(layout[-1][1] + 15, 50)
+        self.assertTrue(layout[-1][0].endswith("…"))
+
     def test_normalizes_and_places_set_counts_in_summary(self):
         projects = _normalize_projects([{
             "name": "DISPLAY",

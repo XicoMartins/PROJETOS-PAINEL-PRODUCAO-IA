@@ -784,6 +784,21 @@ def smart_insights(projects: list[Project], timeline: list[date]) -> list[tuple[
     return insights[:5]
 
 
+def _reference_png_insights(
+    reference_warnings: tuple[str, ...],
+) -> list[tuple[str, str, str]]:
+    visible_warnings = list(reference_warnings[:5])
+    if len(reference_warnings) > 5:
+        visible_warnings = list(reference_warnings[:4])
+        visible_warnings.append(
+            f"Mais {len(reference_warnings) - 4} avisos de referência."
+        )
+    return [
+        ("⚠", "Referências de conjuntos", warning)
+        for warning in visible_warnings
+    ]
+
+
 def render_dashboard(
     projects: list[Project],
     timeline: list[date],
@@ -1046,11 +1061,7 @@ def dashboard_fragment() -> None:
         reference_warnings = tuple(sorted(set(reference_catalog.warnings).union(
             warning for project in project_data for warning in project.reference_warnings
         )))
-        reference_insights = (
-            [("⚠", "Referências de conjuntos", "; ".join(reference_warnings))]
-            if reference_warnings
-            else []
-        )
+        reference_insights = _reference_png_insights(reference_warnings)
         png_insights = (reference_insights + smart_insights(project_data, timeline_dates))[:5]
         with download_column:
             st.markdown('<div class="toolbar-help">EXPORTAÇÃO</div>', unsafe_allow_html=True)
