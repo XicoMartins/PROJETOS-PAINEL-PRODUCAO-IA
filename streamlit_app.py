@@ -953,7 +953,10 @@ def render_dashboard(
 def dashboard_fragment() -> None:
     try:
         raw_rows = load_rows(database_url())
-        reference_snapshot = scan_reference_directory(DEFAULT_PAINTING_LISTS_DIR)
+        reference_directory = os.getenv(
+            "MTECH_PAINTING_LISTS_DIR", DEFAULT_PAINTING_LISTS_DIR
+        ).strip() or DEFAULT_PAINTING_LISTS_DIR
+        reference_snapshot = scan_reference_directory(reference_directory)
         reference_catalog = load_reference_catalog_cached(reference_snapshot)
         all_projects, all_timeline = build_projects(raw_rows, references=reference_catalog)
         if not all_projects:

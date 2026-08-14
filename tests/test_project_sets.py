@@ -1,9 +1,10 @@
+import os
 import unittest
 from datetime import datetime
 from unittest.mock import patch
 
 from painting_references import ReferenceCatalog, reference_key
-from streamlit_app import build_projects, render_dashboard
+from streamlit_app import build_projects, dashboard_fragment, render_dashboard
 
 
 def row(process: str, movement: str, quantity: int) -> dict:
@@ -78,6 +79,19 @@ class ProjectSetsTest(unittest.TestCase):
         self.assertIn("Conj. retornados", html)
         self.assertIn("arquivo &lt;sem QNT&gt;", html)
         self.assertNotIn("arquivo <sem QNT>", html)
+
+    def test_reference_scan_uses_environment_directory_override(self):
+        override = r"D:\referencias-pintura"
+        with (
+            patch.dict(os.environ, {"MTECH_PAINTING_LISTS_DIR": override}),
+            patch("streamlit_app.load_rows", return_value=[]),
+            patch("streamlit_app.scan_reference_directory") as scan_directory,
+            patch("streamlit_app.load_reference_catalog_cached", return_value=ReferenceCatalog({})),
+            patch("streamlit_app.st.markdown"),
+        ):
+            dashboard_fragment.__wrapped__()
+
+        scan_directory.assert_called_once_with(override)
 
 
 if __name__ == "__main__":
