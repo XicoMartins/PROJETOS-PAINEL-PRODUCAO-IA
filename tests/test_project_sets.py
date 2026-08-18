@@ -146,11 +146,58 @@ class ProjectSetsTest(unittest.TestCase):
             patch("streamlit_app.load_rows", return_value=[]),
             patch("streamlit_app.scan_reference_directory") as scan_directory,
             patch("streamlit_app.load_reference_catalog_cached", return_value=ReferenceCatalog({})),
+            patch(
+                "streamlit_app.load_github_reference_catalog_cached",
+                return_value=ReferenceCatalog({}),
+            ),
             patch("streamlit_app.st.markdown"),
         ):
             dashboard_fragment.__wrapped__()
 
         scan_directory.assert_called_once_with(override)
+
+    def test_online_fallback_divides_femsa_item_totals_by_synced_qnt(self):
+        catalog_loader = getattr(streamlit_app, "load_dashboard_reference_catalog", None)
+        self.assertTrue(callable(catalog_loader), "fallback online de referências ainda não implementado")
+
+        remote_catalog = ReferenceCatalog({
+            reference_key(
+                "PG + ECONOMIA HIBRIDO", "BDJ DIREITA MAIOR CORPO", "remessa"
+            ): 4,
+            reference_key(
+                "PG + ECONOMIA HIBRIDO", "BDJ DIREITA MAIOR CORPO", "retorno"
+            ): 4,
+        })
+        with (
+            patch(
+                "streamlit_app.scan_reference_directory",
+                return_value=ReferenceSnapshot("S:\\indisponivel", (), ("unidade indisponível",)),
+            ),
+            patch(
+                "streamlit_app.load_reference_catalog_cached",
+                return_value=ReferenceCatalog({}, ("unidade indisponível",)),
+            ),
+            patch(
+                "streamlit_app.load_github_reference_catalog_cached",
+                return_value=remote_catalog,
+            ) as remote_loader,
+        ):
+            references = catalog_loader("S:\\indisponivel")
+
+        sent = row("ENVIO - BDJ DIREITA MAIOR CORPO - VERMELHO", "Envio à Pintura", 400)
+        returned = row("RETORNO - BDJ DIREITA MAIOR CORPO - VERMELHO", "Retorno da Pintura", 179)
+        for item in (sent, returned):
+            item["cliente"] = "FEMSA"
+            item["display"] = "PG + ECONOMIA HIBRIDO"
+            item["codigo_pintura"] = "VM - 1000"
+
+        projects, _ = build_projects([sent, returned], references=references)
+
+        self.assertEqual(projects[0].processes[0].sent_quantity, 400)
+        self.assertEqual(projects[0].processes[0].sent_sets, 100)
+        self.assertEqual(projects[0].processes[0].returned_quantity, 179)
+        self.assertEqual(projects[0].processes[0].returned_sets, 44)
+        remote_loader.assert_called_once()
 
 
 if __name__ == "__main__":

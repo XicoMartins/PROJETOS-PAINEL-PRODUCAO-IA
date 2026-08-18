@@ -20,6 +20,7 @@ from painting_references import (
     ReferenceCatalog,
     ReferenceSnapshot,
     complete_sets,
+    load_github_reference_catalog,
     load_reference_catalog,
     reference_key,
     scan_reference_directory,
@@ -27,7 +28,9 @@ from painting_references import (
 
 
 DEFAULT_PAINTING_LISTS_DIR = r"S:\PROJETOS EM ANDAMENTO\PAINEL DE CONTROLE MTECH\PROGRAMAS\PROJETOS - PAINEL PRODUÇÃO IA\planilhas_pintura"
+DEFAULT_PAINTING_LISTS_GITHUB_API = "https://api.github.com/repos/XicoMartins/PROJETOS-PAINEL-PRODUCAO-IA/contents/planilhas_pintura?ref=main"
 REFERENCE_CATALOG_CACHE_TTL_SECONDS = 30
+REMOTE_REFERENCE_CACHE_TTL_SECONDS = 120
 MAX_REFERENCE_ALERT_LINES = 5
 
 
@@ -460,6 +463,38 @@ def load_reference_catalog_cached(
 ) -> ReferenceCatalog:
     del cache_epoch
     return load_reference_catalog(snapshot)
+
+
+@st.cache_data(ttl=REMOTE_REFERENCE_CACHE_TTL_SECONDS, show_spinner=False)
+def load_github_reference_catalog_cached(
+    contents_url: str,
+    cache_epoch: int,
+) -> ReferenceCatalog:
+    del cache_epoch
+    return load_github_reference_catalog(contents_url)
+
+
+def load_dashboard_reference_catalog(reference_directory: str) -> ReferenceCatalog:
+    local_snapshot = scan_reference_directory(reference_directory)
+    local_catalog = load_reference_catalog_cached(
+        local_snapshot,
+        reference_catalog_cache_epoch(),
+    )
+    if local_catalog.quantities:
+        return local_catalog
+
+    github_api_url = os.getenv(
+        "MTECH_PAINTING_LISTS_GITHUB_API",
+        DEFAULT_PAINTING_LISTS_GITHUB_API,
+    ).strip() or DEFAULT_PAINTING_LISTS_GITHUB_API
+    remote_epoch = math.floor(monotonic() / REMOTE_REFERENCE_CACHE_TTL_SECONDS)
+    remote_catalog = load_github_reference_catalog_cached(github_api_url, remote_epoch)
+    if remote_catalog.quantities:
+        return remote_catalog
+    return ReferenceCatalog(
+        {},
+        tuple(dict.fromkeys(local_catalog.warnings + remote_catalog.warnings)),
+    )
 
 
 def project_name(entry: Entry) -> str:
@@ -990,11 +1025,7 @@ def dashboard_fragment() -> None:
         reference_directory = os.getenv(
             "MTECH_PAINTING_LISTS_DIR", DEFAULT_PAINTING_LISTS_DIR
         ).strip() or DEFAULT_PAINTING_LISTS_DIR
-        reference_snapshot = scan_reference_directory(reference_directory)
-        reference_catalog = load_reference_catalog_cached(
-            reference_snapshot,
-            reference_catalog_cache_epoch(),
-        )
+        reference_catalog = load_dashboard_reference_catalog(reference_directory)
         all_projects, all_timeline = build_projects(raw_rows, references=reference_catalog)
         if not all_projects:
             st.markdown(
