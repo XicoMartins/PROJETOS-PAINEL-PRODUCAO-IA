@@ -86,6 +86,26 @@ class ProjectSetsTest(unittest.TestCase):
         self.assertIn("arquivo &lt;sem QNT&gt;", html)
         self.assertNotIn("arquivo <sem QNT>", html)
 
+    def test_dashboard_without_reference_warnings_keeps_insights_in_html_block(self):
+        projects, timeline = build_projects([
+            row("ENVIO - BASE - PRETO", "Envio à Pintura", 9),
+            row("RETORNO - BASE - PRETO", "Retorno da Pintura", 8),
+        ])
+
+        with patch("streamlit_app.st.markdown") as markdown:
+            render_dashboard(
+                projects,
+                timeline,
+                2026,
+                datetime(2026, 8, 1, 8),
+                (),
+            )
+
+        html = markdown.call_args.args[0]
+        bottom_grid = html.split('<div class="bottom-grid">', 1)[1].split("</aside>", 1)[0]
+        self.assertIn('<aside class="panel insights">', bottom_grid)
+        self.assertNotRegex(bottom_grid, r"\n[ \t]*\n")
+
     def test_transient_reference_failure_is_not_cached_indefinitely(self):
         snapshot = ReferenceSnapshot(r"D:\referencias-pintura", ())
         transient = ReferenceCatalog({}, ("arquivo bloqueado",))

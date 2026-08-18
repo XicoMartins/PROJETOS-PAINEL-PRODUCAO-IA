@@ -968,7 +968,7 @@ def render_dashboard(
         '<div class="reference-alert"><strong>Referências QNT pendentes</strong>'
         + "<br>".join(safe(warning) for warning in visible_reference_warnings)
         + "</div>"
-        if reference_warnings else ""
+        if reference_warnings else "<!-- sem avisos de referência -->"
     )
 
     content = f"""
