@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+from openpyxl import Workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -16,6 +18,61 @@ from services.display_panel_service import compute_display_panel_summary
 
 
 class DisplayPanelServiceTests(unittest.TestCase):
+    @patch("services.display_panel_service.find_planilha_for_display")
+    def test_compute_summary_uses_qnt_formulas_for_both_laser_machines(
+        self,
+        mock_find_planilha,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            planilha_path = Path(tmp) / "processos.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.append(
+                ["ACABADO", "FERRAMENTAL", "PROCESSO", "QNT", "QNT TOTAL"]
+            )
+            sheet.append(
+                ["Display X", "Laser Tube", "Tube Nest", "=E2/1000", 94]
+            )
+            sheet.append(
+                ["Display X", "Laser Chapa", "Chapa Nest", "=E3/1000", 47]
+            )
+            workbook.save(planilha_path)
+
+            mock_find_planilha.return_value = (planilha_path, planilha_path.name)
+
+            cases = [
+                ("laser tube", "Tube Nest", 94.0),
+                ("laser chapa", "Chapa Nest", 47.0),
+            ]
+            for machine, process, expected_total in cases:
+                with self.subTest(machine=machine):
+                    df = pd.DataFrame(
+                        {
+                            "display": ["Display X"],
+                            "numero_display": ["26011000"],
+                            "processo": [process],
+                            "maquinario": [machine],
+                            "quantidade_produzida": [0],
+                            "duracao_horas": [1.0],
+                        }
+                    )
+                    filter_context = FilterContext(
+                        display_selected=["Display X"],
+                        numero_display_selected=["26011000"],
+                        maquinario_selected=[machine],
+                        filtered_no_operator=df.copy(),
+                    )
+
+                    summary = compute_display_panel_summary(
+                        df,
+                        filter_context,
+                        operator_count=1,
+                    )
+
+                    self.assertEqual(summary.lote_text, "1000")
+                    self.assertIsNotNone(summary.target_total)
+                    self.assertAlmostEqual(float(summary.target_total), expected_total)
+
     @patch("services.display_panel_service.load_planilha_processes")
     @patch("services.display_panel_service.find_planilha_for_display")
     def test_compute_summary_uses_planilha_and_operator_comparison(

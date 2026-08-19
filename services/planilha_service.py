@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import math
+import re
 import unicodedata
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+from openpyxl import load_workbook
 
 from constants import DISPLAY_PLANILHA_MAP
 from filters import FilterContext
@@ -22,6 +24,10 @@ STANDARD_MINUTES_ALIASES = {
     "tempo_padrao_minuto_por_peca",
     "minutos_padrao_por_peca",
 }
+SIMPLE_DIVISION_FORMULA = re.compile(
+    r"^\s*=\s*(?P<column>[A-Z]+)(?P<row>\d+)\s*/\s*(?P<divisor>\d+(?:\.\d+)?)\s*$",
+    re.IGNORECASE,
+)
 
 
 def normalize_display_name(text: str) -> str:
@@ -100,6 +106,57 @@ def _find_column_by_aliases(df: pd.DataFrame, aliases: set[str]):
         if column is not None:
             return column
     return None
+
+
+def _excel_column_index(column_letters: str) -> int:
+    index = 0
+    for char in column_letters.upper():
+        index = index * 26 + (ord(char) - ord("A") + 1)
+    return index - 1
+
+
+def _resolve_simple_division_formula(
+    formula,
+    source_row: pd.Series,
+    excel_row: int,
+) -> float | None:
+    if not isinstance(formula, str):
+        return None
+    match = SIMPLE_DIVISION_FORMULA.fullmatch(formula)
+    if match is None or int(match.group("row")) != excel_row:
+        return None
+
+    source_index = _excel_column_index(match.group("column"))
+    if source_index < 0 or source_index >= len(source_row):
+        return None
+
+    source_value = pd.to_numeric(
+        pd.Series([source_row.iloc[source_index]]), errors="coerce"
+    ).iloc[0]
+    divisor = float(match.group("divisor"))
+    if pd.isna(source_value) or not math.isfinite(float(source_value)) or divisor <= 0:
+        return None
+    return float(source_value) / divisor
+
+
+def _load_quantity_formulas(
+    path: Path,
+    quantity_column_index: int,
+    row_count: int,
+) -> list[object]:
+    workbook = None
+    try:
+        workbook = load_workbook(path, data_only=False, read_only=True)
+        sheet = workbook.active
+        return [
+            sheet.cell(row=row_position + 2, column=quantity_column_index + 1).value
+            for row_position in range(row_count)
+        ]
+    except Exception:
+        return [None] * row_count
+    finally:
+        if workbook is not None:
+            workbook.close()
 
 
 def build_planilha_file_map(planilhas_dir: Path) -> dict[str, Path]:
@@ -199,6 +256,21 @@ def load_planilha_processes(path_str: str, mtime: float | None) -> pd.DataFrame:
         if optional_column is not None and optional_column not in selected_columns:
             selected_columns.append(optional_column)
 
+    quantity_values = pd.to_numeric(df[qnt_col], errors="coerce")
+    if quantity_values.isna().any():
+        quantity_column_index = int(df.columns.get_loc(qnt_col))
+        formulas = _load_quantity_formulas(path, quantity_column_index, len(df))
+        for row_position, formula in enumerate(formulas):
+            if pd.notna(quantity_values.iloc[row_position]):
+                continue
+            resolved = _resolve_simple_division_formula(
+                formula,
+                df.iloc[row_position],
+                row_position + 2,
+            )
+            if resolved is not None:
+                quantity_values.iloc[row_position] = resolved
+
     plan = df[selected_columns].copy()
     plan["ordem_planilha"] = range(1, len(plan) + 1)
     plan["maquinario_nome"] = plan[maquinario_col].astype("string").str.strip()
@@ -213,7 +285,7 @@ def load_planilha_processes(path_str: str, mtime: float | None) -> pd.DataFrame:
     plan.loc[invalid_process, "processo_nome"] = pd.NA
     plan["maquinario_key"] = plan[maquinario_col].apply(normalize_process_name)
     plan["processo_key"] = plan[process_col].apply(normalize_process_name)
-    plan["qnt_por_produto"] = pd.to_numeric(plan[qnt_col], errors="coerce")
+    plan["qnt_por_produto"] = quantity_values
     plan = plan.dropna(
         subset=["maquinario_nome", "processo_nome", "qnt_por_produto"]
     )
