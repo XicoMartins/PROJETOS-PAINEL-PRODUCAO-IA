@@ -48,6 +48,14 @@ class WeeklyCalendarTest(unittest.TestCase):
             (date(2026, 8, 24), date(2026, 8, 28)),
         )
 
+    def test_normalizes_any_selected_day_to_its_monday_and_friday(self):
+        from weekly_control import week_period_for_date
+
+        period = week_period_for_date(date(2026, 8, 27))
+
+        self.assertEqual(period.start, date(2026, 8, 24))
+        self.assertEqual(period.end, date(2026, 8, 28))
+
 
 class WeeklyNormalizationTest(unittest.TestCase):
     def test_process_takes_precedence_when_it_identifies_the_movement(self):
@@ -222,6 +230,22 @@ class WeeklyCalculationTest(unittest.TestCase):
         self.assertEqual(control.previous_summary.pending_references, 6)
         self.assertEqual(control.current_summary.pending_pieces, Decimal("937"))
         self.assertEqual(control.current_summary.pending_references, 4)
+
+
+class WeeklySubmissionTest(unittest.TestCase):
+    def test_target_submission_requires_confirmation(self):
+        from weekly_control import validate_target_submission
+
+        with self.assertRaisesRegex(ValueError, "Confirme"):
+            validate_target_submission(date(2026, 8, 27), 501, False)
+
+    def test_target_submission_normalizes_the_week(self):
+        from weekly_control import validate_target_submission
+
+        period, target = validate_target_submission(date(2026, 8, 27), 501, True)
+
+        self.assertEqual((period.start, period.end), (date(2026, 8, 24), date(2026, 8, 28)))
+        self.assertEqual(target, 501)
 
 
 if __name__ == "__main__":

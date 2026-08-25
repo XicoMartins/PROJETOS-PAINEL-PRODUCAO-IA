@@ -5,9 +5,10 @@ import math
 import os
 import re
 import unicodedata
+from decimal import Decimal, InvalidOperation
 from time import monotonic
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from statistics import mean, pstdev
 
@@ -25,6 +26,22 @@ from painting_references import (
     reference_key,
     scan_reference_directory,
 )
+from weekly_control import (
+    ComponentRequirement,
+    build_weekly_control,
+    component_key as weekly_component_key,
+    project_key,
+    validate_target_submission,
+    weekly_periods,
+)
+from weekly_control_data import (
+    WeeklySourceData,
+    list_painting_projects,
+    load_weekly_source,
+    save_component_requirements,
+    save_weekly_target,
+)
+from weekly_control_view import render_weekly_control_html, render_weekly_empty_html
 
 
 DEFAULT_PAINTING_LISTS_DIR = r"S:\PROJETOS EM ANDAMENTO\PAINEL DE CONTROLE MTECH\PROGRAMAS\PROJETOS - PAINEL PRODUÇÃO IA\planilhas_pintura"
@@ -449,6 +466,16 @@ def load_rows(db_url: str) -> list[dict]:
                 """
             )
             return list(cursor.fetchall())
+
+
+@st.cache_data(ttl=55, show_spinner=False)
+def load_weekly_projects_cached(db_url: str):
+    return list_painting_projects(db_url)
+
+
+@st.cache_data(ttl=55, show_spinner=False)
+def load_weekly_source_cached(db_url, identity, previous_period, current_period):
+    return load_weekly_source(db_url, identity, previous_period, current_period)
 
 
 def reference_catalog_cache_epoch(now: float | None = None) -> int:
@@ -1157,7 +1184,252 @@ def dashboard_fragment() -> None:
 
 def main() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
-    dashboard_fragment()
+    managerial_tab, weekly_tab = st.tabs(["Visão gerencial", "Controle semanal"])
+    with managerial_tab:
+        dashboard_fragment()
+    with weekly_tab:
+        weekly_control_panel()
+
+
+def weekly_control_panel() -> None:
+    try:
+        db_url = database_url()
+        projects = load_weekly_projects_cached(db_url)
+        if not projects:
+            st.markdown(
+                render_weekly_empty_html(
+                    "Nenhum projeto de pintura encontrado",
+                    "A conexão funcionou, mas painting_entries não possui identidades completas.",
+                ),
+                unsafe_allow_html=True,
+            )
+            return
+
+        by_key = {project.key: project for project in projects}
+        selected_key = st.selectbox(
+            "Projeto analisado",
+            options=tuple(by_key),
+            format_func=lambda key: by_key[key].label,
+            key="weekly_control_project",
+        )
+        selected = by_key[selected_key]
+        previous_period, current_period = weekly_periods()
+        source = load_weekly_source_cached(
+            db_url,
+            selected.identity,
+            previous_period,
+            current_period,
+        )
+        requirements = _complete_detected_requirements(source)
+        control = build_weekly_control(
+            source.previous_target,
+            source.current_target,
+            requirements,
+            source.entries,
+        )
+        warnings = list(source.warnings)
+        if source.previous_target is None:
+            warnings.append("Meta acumulada da semana passada não cadastrada.")
+        if source.current_target is None:
+            warnings.append("Meta acumulada da semana atual não cadastrada.")
+        warnings.extend(
+            f"Quantidade por conjunto ausente: {requirement.display_name}."
+            for requirement in requirements
+            if requirement.active and requirement.quantity_per_set is None
+        )
+        control = replace(control, warnings=tuple(dict.fromkeys(warnings)))
+        st.markdown(
+            render_weekly_control_html(
+                selected.identity,
+                previous_period,
+                current_period,
+                control,
+                source.updated_at,
+            ),
+            unsafe_allow_html=True,
+        )
+        render_target_editor(db_url, selected.identity, current_period, source)
+        render_requirement_editor(db_url, selected.identity, requirements)
+    except psycopg.errors.UndefinedTable:
+        st.markdown(
+            render_weekly_empty_html(
+                "Estrutura semanal ainda não configurada",
+                "A migration das metas e requisitos precisa ser aplicada no Supabase.",
+            ),
+            unsafe_allow_html=True,
+        )
+    except Exception as exc:
+        st.markdown(
+            render_weekly_empty_html(
+                "Não foi possível carregar o controle semanal",
+                str(exc),
+            ),
+            unsafe_allow_html=True,
+        )
+
+
+def _complete_detected_requirements(
+    source: WeeklySourceData,
+) -> tuple[ComponentRequirement, ...]:
+    requirements = list(source.requirements)
+    known = {normalize(item.source_component_key) for item in requirements}
+    used_orders = {item.display_order for item in requirements}
+    next_order = 0
+    for detected_key in source.detected_component_keys:
+        if normalize(detected_key) in known:
+            continue
+        while next_order in used_orders:
+            next_order += 1
+        requirements.append(
+            ComponentRequirement(
+                source_component_key=detected_key,
+                display_name=detected_key,
+                quantity_per_set=None,
+                display_order=next_order,
+                active=True,
+            )
+        )
+        used_orders.add(next_order)
+        next_order += 1
+    return tuple(sorted(requirements, key=lambda item: item.display_order))
+
+
+def render_target_editor(db_url, identity, current_period, source) -> None:
+    with st.expander("Editar meta acumulada da semana", expanded=False):
+        st.caption(
+            "Informe o total acumulado previsto até a sexta-feira da semana escolhida. "
+            "Exemplo: 167 por semana resulta em 334 na segunda semana e 501 na terceira."
+        )
+        with st.form(f"weekly_target_form_{project_key(identity)}"):
+            selected_day = st.date_input(
+                "Semana da meta",
+                value=current_period.end,
+                format="DD/MM/YYYY",
+            )
+            target_sets = st.number_input(
+                "Meta acumulada em conjuntos",
+                min_value=0,
+                step=1,
+                value=int(source.current_target or 0),
+            )
+            confirmed = st.checkbox(
+                "Confirmo a gravação desta meta acumulada",
+                key=f"weekly_target_confirm_{project_key(identity)}",
+            )
+            submitted = st.form_submit_button("Salvar meta acumulada")
+        if not submitted:
+            return
+        try:
+            period, validated_target = validate_target_submission(
+                selected_day,
+                int(target_sets),
+                confirmed,
+            )
+            save_weekly_target(db_url, identity, period, validated_target)
+        except ValueError as exc:
+            st.warning(str(exc))
+            return
+        except Exception as exc:
+            st.error(f"Não foi possível salvar a meta: {exc}")
+            return
+        load_weekly_source_cached.clear()
+        st.success(
+            f"Meta acumulada de {validated_target} conjuntos salva para "
+            f"{period.start.strftime('%d/%m')} a {period.end.strftime('%d/%m/%Y')}."
+        )
+        st.rerun()
+
+
+def render_requirement_editor(db_url, identity, requirements) -> None:
+    records = [
+        {
+            "Ativo": requirement.active,
+            "Componente na base": requirement.source_component_key,
+            "Nome exibido": requirement.display_name,
+            "Qtd. por conjunto": (
+                float(requirement.quantity_per_set)
+                if requirement.quantity_per_set is not None
+                else None
+            ),
+            "Ordem": requirement.display_order,
+        }
+        for requirement in requirements
+    ]
+    with st.expander("Configurar componentes do projeto", expanded=False):
+        st.caption(
+            "Os componentes detectados em painting_entries aparecem automaticamente. "
+            "Preencha a quantidade por conjunto, ajuste os nomes e adicione linhas quando necessário."
+        )
+        with st.form(f"weekly_requirements_form_{project_key(identity)}"):
+            edited = st.data_editor(
+                records,
+                num_rows="dynamic",
+                use_container_width=True,
+                hide_index=True,
+                key=f"weekly_requirements_editor_{project_key(identity)}",
+                column_config={
+                    "Ativo": st.column_config.CheckboxColumn("Ativo"),
+                    "Componente na base": st.column_config.TextColumn(
+                        "Componente na base",
+                        help="Nome normalizado que será relacionado ao processo de pintura.",
+                    ),
+                    "Nome exibido": st.column_config.TextColumn("Nome exibido"),
+                    "Qtd. por conjunto": st.column_config.NumberColumn(
+                        "Qtd. por conjunto",
+                        min_value=0.001,
+                        step=1.0,
+                    ),
+                    "Ordem": st.column_config.NumberColumn(
+                        "Ordem",
+                        min_value=0,
+                        step=1,
+                    ),
+                },
+            )
+            confirmed = st.checkbox(
+                "Confirmo a gravação destes requisitos",
+                key=f"weekly_requirements_confirm_{project_key(identity)}",
+            )
+            submitted = st.form_submit_button("Salvar componentes")
+        if not submitted:
+            return
+        if not confirmed:
+            st.warning("Confirme a gravação dos requisitos.")
+            return
+        try:
+            rows = edited.to_dict("records") if hasattr(edited, "to_dict") else edited
+            parsed: list[ComponentRequirement] = []
+            for row in rows:
+                raw_quantity = row.get("Qtd. por conjunto")
+                quantity = None
+                if raw_quantity not in (None, "") and not (
+                    isinstance(raw_quantity, float) and math.isnan(raw_quantity)
+                ):
+                    quantity = Decimal(str(raw_quantity))
+                raw_order = row.get("Ordem")
+                if raw_order in (None, ""):
+                    raise ValueError("Todas as linhas precisam de uma ordem de exibição.")
+                parsed.append(
+                    ComponentRequirement(
+                        source_component_key=weekly_component_key(
+                            row.get("Componente na base")
+                        ),
+                        display_name=str(row.get("Nome exibido") or "").strip(),
+                        quantity_per_set=quantity,
+                        display_order=int(raw_order),
+                        active=bool(row.get("Ativo", True)),
+                    )
+                )
+            save_component_requirements(db_url, identity, tuple(parsed))
+        except (ValueError, InvalidOperation) as exc:
+            st.warning(str(exc))
+            return
+        except Exception as exc:
+            st.error(f"Não foi possível salvar os componentes: {exc}")
+            return
+        load_weekly_source_cached.clear()
+        st.success("Componentes do projeto salvos.")
+        st.rerun()
 
 
 if __name__ == "__main__":

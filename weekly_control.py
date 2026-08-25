@@ -98,11 +98,26 @@ def weekly_periods(now: datetime | None = None) -> tuple[WeekPeriod, WeekPeriod]
         instant = instant.replace(tzinfo=SAO_PAULO)
     else:
         instant = instant.astimezone(SAO_PAULO)
-    current_start = instant.date() - timedelta(days=instant.weekday())
-    current = WeekPeriod(current_start, current_start + timedelta(days=4))
-    previous_start = current_start - timedelta(days=7)
-    previous = WeekPeriod(previous_start, previous_start + timedelta(days=4))
+    current = week_period_for_date(instant.date())
+    previous = week_period_for_date(current.start - timedelta(days=7))
     return previous, current
+
+
+def week_period_for_date(day: date) -> WeekPeriod:
+    start = day - timedelta(days=day.weekday())
+    return WeekPeriod(start, start + timedelta(days=4))
+
+
+def validate_target_submission(
+    selected_day: date,
+    target_sets: int,
+    confirmed: bool,
+) -> tuple[WeekPeriod, int]:
+    if not confirmed:
+        raise ValueError("Confirme a gravação da meta acumulada.")
+    if isinstance(target_sets, bool) or not isinstance(target_sets, int) or target_sets < 0:
+        raise ValueError("A meta acumulada deve ser um número inteiro igual ou maior que zero.")
+    return week_period_for_date(selected_day), target_sets
 
 
 def movement_from_fields(
