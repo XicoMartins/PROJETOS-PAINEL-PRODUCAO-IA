@@ -16,6 +16,12 @@ Esta especificação substitui a proposta inicial de implementar uma rota Next.j
 - O painel continuará conectado ao Supabase no servidor; credenciais nunca serão enviadas ao navegador.
 - Metas semanais, quantidade por conjunto e ordem dos componentes não serão fixadas no código.
 - Duas tabelas auxiliares guardarão somente metadados de planejamento.
+- O usuário poderá selecionar qualquer projeto encontrado em `painting_entries`.
+- A meta será informada manualmente como valor acumulado até a sexta-feira escolhida.
+- A edição de metas e requisitos ficará disponível no próprio painel, sem senha, com confirmação explícita antes da gravação.
+- Componentes, quantidade por conjunto, nome visual e ordem poderão ser configurados por projeto.
+- `CHAVE`, com uma unidade por conjunto, e `SUPORTE FIXAÇÃO DISPLAY`, com duas unidades por conjunto, serão requisitos iniciais somente do projeto PG + Economia Híbrido.
+- Uma futura leitura automática dos planos acelerados gravará nas mesmas tabelas, sem alterar as fórmulas ou a interface de consulta.
 - Os valores do material visual serão usados apenas em testes automatizados.
 - A aba será publicada no painel Streamlit ao final, depois da verificação local.
 - Não serão usados subagentes.
@@ -41,22 +47,22 @@ O Supabase possui três tabelas públicas: `painting_entries`, `production_entri
 | `quantidade_total` | conferência do acumulado registrado |
 | `created_at` | atualização e desempate auxiliar |
 
-O projeto ativo identificado na inspeção possui a identidade exata:
+O projeto mais recente identificado na inspeção possui a identidade exata:
 
 - `cliente = FEMSA`
 - `display = PG + ECONOMIA HIBRIDO`
 - `numero_display = 26081000`
 - `codigo_pintura = VM - 1000`
 
-Essa identidade foi usada somente para validar a modelagem. Ela não será fixada no código; será armazenada no lote semanal ativo.
+Essa identidade foi usada somente para validar a modelagem. Ela não será fixada no código; será obtida do seletor dinâmico e registrada junto às metas.
 
 Nos dados atuais desse projeto, `SUM(quantidade)` por componente e movimento coincide com o último `quantidade_total`. O cálculo usará a soma dos incrementos de `quantidade`, preservando o modelo operacional já utilizado pelo painel.
 
 ## 4. Migration mínima proposta
 
-### 4.1 `painting_weekly_lots`
+### 4.1 `painting_weekly_targets`
 
-Armazena o planejamento semanal e a identidade exata da origem dos movimentos.
+Armazena a meta acumulada de cada projeto por semana e a identidade exata da origem dos movimentos.
 
 | Coluna | Tipo/Regra | Finalidade |
 | --- | --- | --- |
@@ -69,8 +75,7 @@ Armazena o planejamento semanal e a identidade exata da origem dos movimentos.
 | `source_codigo_pintura` | `text not null` | filtro exato em `painting_entries.codigo_pintura` |
 | `week_start` | `date not null` | segunda-feira da semana planejada |
 | `week_end` | `date not null` | sexta-feira da semana planejada |
-| `target_sets` | `integer not null check (target_sets > 0)` | meta da semana em conjuntos |
-| `status` | `text not null` com check | `planned`, `active` ou `closed` |
+| `target_sets` | `integer not null check (target_sets >= 0)` | meta acumulada até a sexta-feira |
 | `created_at` | `timestamptz not null default now()` | auditoria |
 | `updated_at` | `timestamptz not null default now()` | auditoria |
 
@@ -79,7 +84,7 @@ Restrições:
 - `week_end = week_start + 4`;
 - `week_start` deve ser uma segunda-feira;
 - unicidade de `project_key` e `week_start`;
-- índice para localizar lotes por período e status.
+- índice para localizar metas por projeto e período.
 
 ### 4.2 `painting_component_requirements`
 
@@ -88,10 +93,10 @@ Armazena os requisitos de montagem e a apresentação dos componentes.
 | Coluna | Tipo/Regra | Finalidade |
 | --- | --- | --- |
 | `id` | `bigint generated always as identity`, PK | identificador técnico |
-| `project_key` | `text not null` | vínculo lógico com os lotes |
+| `project_key` | `text not null` | vínculo lógico com as metas do projeto |
 | `source_component_key` | `text not null` | componente normalizado encontrado em `painting_entries` |
 | `display_name` | `text not null` | nome executivo exibido na tabela |
-| `quantity_per_set` | `numeric not null check (quantity_per_set > 0)` | consumo por conjunto |
+| `quantity_per_set` | `numeric check (quantity_per_set > 0)` | consumo por conjunto; nulo enquanto incompleto |
 | `display_order` | `integer not null check (display_order >= 0)` | ordem visual |
 | `active` | `boolean not null default true` | vigência do requisito |
 | `created_at` | `timestamptz not null default now()` | auditoria |
@@ -117,13 +122,15 @@ Todos os cálculos de calendário usarão `America/Sao_Paulo`.
 
 - Semana atual: segunda a sexta da semana que contém a data corrente.
 - Semana anterior: segunda a sexta imediatamente anterior.
-- A aba localizará o lote da semana atual com status `active`.
-- O lote anterior será localizado pelo mesmo `project_key` e pelo início da semana anterior.
-- A identidade de origem do lote ativo filtrará `painting_entries` por igualdade exata nas quatro colunas de origem.
+- O seletor será formado por todas as combinações distintas de `cliente`, `display`, `numero_display` e `codigo_pintura` encontradas em `painting_entries`.
+- Cada combinação receberá um `project_key` determinístico, calculado pela mesma função no carregamento e na gravação.
+- O projeto inicialmente selecionado será o que possuir o movimento mais recente; o usuário poderá trocar o filtro sem misturar dados.
+- As metas anterior e atual serão localizadas pelo `project_key` selecionado e pelo início exato de cada semana.
+- A identidade selecionada filtrará `painting_entries` por igualdade exata nas quatro colunas de origem.
 - Nenhum lançamento de outro display, número ou código de pintura será combinado.
-- Se houver inconsistência entre múltiplos lotes ativos, a aba mostrará erro de configuração em vez de escolher silenciosamente.
+- Se uma mesma chave produzir identidades conflitantes, a aba mostrará erro de configuração em vez de escolher silenciosamente.
 
-Os dois painéis usarão a mesma fotografia acumulada de movimentos do projeto ativo. Somente a meta usada na comparação será diferente.
+Os dois painéis usarão a mesma fotografia acumulada de movimentos do projeto selecionado. Somente a meta usada na comparação será diferente.
 
 ## 6. Normalização e agregação
 
@@ -177,6 +184,7 @@ O aplicativo terá navegação direta entre:
 
 A interface semanal terá:
 
+- seletor de projeto alimentado exclusivamente pelas identidades presentes em `painting_entries`;
 - cabeçalho grafite com filete vermelho, etiqueta, título, projeto e subtítulo;
 - painel esquerdo vinho para a semana passada, com coluna `P/ FECHAR`;
 - painel direito verde-petróleo para a semana atual, com coluna `P/ ENVIAR`;
@@ -187,6 +195,25 @@ A interface semanal terá:
 - card `Próxima ação: priorizar linhas em vermelho`;
 - data/hora da última atualização em `America/Sao_Paulo`.
 
+### 7.1 Edição manual de metas
+
+Uma área expansível permitirá escolher a semana, informar a meta acumulada em conjuntos e salvar. Ao selecionar uma semana já cadastrada, o formulário carregará o valor existente para correção. A gravação exigirá uma confirmação visível, mas não solicitará senha.
+
+O formulário explicará que a meta é acumulada até a sexta-feira. Por exemplo, um plano de 167 conjuntos por semana resulta em 334 na segunda semana e 501 na terceira. Esses números continuarão sendo exemplos de explicação e teste, não valores iniciais da produção.
+
+### 7.2 Configuração manual dos componentes
+
+Outra área expansível mostrará os componentes detectados nos movimentos do projeto selecionado e os requisitos já cadastrados. O usuário poderá:
+
+- informar ou corrigir a quantidade por conjunto;
+- alterar o nome visual;
+- definir a ordem;
+- ativar ou desativar um requisito;
+- incluir um componente que ainda não tenha movimento;
+- confirmar e salvar as alterações no Supabase.
+
+Os requisitos `CHAVE = 1` e `SUPORTE FIXAÇÃO DISPLAY = 2` serão cadastrados somente para o projeto PG + Economia Híbrido aprovado. Eles aparecerão com `—` nos movimentos enquanto não existirem lançamentos correspondentes.
+
 Em desktop, os painéis ficarão lado a lado sem rolagem horizontal. Em telas menores, serão empilhados com semana passada primeiro. A tabela terá marcação semântica e foco visível na navegação.
 
 ## 8. Estados e erros
@@ -196,11 +223,12 @@ A aba distinguirá explicitamente:
 - carregamento;
 - conexão ou consulta indisponível;
 - migration ainda não aplicada;
-- nenhum lote ativo para a semana;
-- lote anterior ausente;
-- múltiplos lotes ativos;
+- nenhum projeto em `painting_entries`;
+- meta da semana anterior ou atual ausente;
+- identidade de projeto conflitante;
 - projeto sem movimentos;
 - requisito ausente ou incompleto;
+- falha de validação ou gravação dos formulários;
 - dados válidos.
 
 Erros do Supabase nunca serão substituídos por dados demonstrativos. O painel poderá exibir os dados disponíveis parcialmente, desde que sinalize quais cálculos estão indisponíveis e por quê.
@@ -211,7 +239,7 @@ A implementação deverá manter responsabilidades separadas:
 
 - `streamlit_app.py`: integração da navegação e composição de alto nível;
 - novo módulo de domínio semanal: tipos, calendário, normalização, fórmulas e montagem do modelo de apresentação;
-- novo módulo de acesso semanal: consultas de lotes, requisitos e movimentos;
+- novo módulo de acesso semanal: consultas de projetos, metas, requisitos e movimentos, além das gravações manuais;
 - novo módulo de visualização semanal: HTML/CSS escopado e estados da aba;
 - arquivo de migration SQL versionado no projeto;
 - testes Python específicos para domínio, acesso e renderização.
@@ -233,7 +261,10 @@ Cobertura obrigatória:
 - separação de TINTA;
 - normalização de remessa, retorno e componente;
 - filtro exato do projeto;
-- lotes ausentes ou conflitantes;
+- listagem de todos os projetos e identidades conflitantes;
+- criação e atualização idempotente de metas acumuladas;
+- criação e atualização idempotente dos requisitos;
+- confirmação obrigatória antes da gravação;
 - renderização das duas áreas de navegação;
 - estados de erro e base vazia;
 - ausência de valores demonstrativos na produção.
@@ -255,21 +286,25 @@ Antes de publicar:
 
 Depois da validação, a versão será publicada no mecanismo já usado pelo painel Streamlit oficial e o endereço `https://painel-pintura-mtech.streamlit.app/` será verificado novamente.
 
-## 12. Dados iniciais ainda necessários
+## 12. Dados iniciais e manutenção
 
-A migration criará a estrutura, mas não inventará registros de produção. Antes de popular as novas tabelas, será necessário obter ou aprovar explicitamente:
+A migration criará a estrutura sem cadastrar 334, 501 ou qualquer outra meta. As metas reais serão informadas pelo usuário no formulário do painel.
 
-- metas reais da semana anterior e da semana atual;
-- origem autorizada das quantidades por conjunto e da ordem dos componentes;
-- rótulo executivo definitivo do projeto.
+Os componentes existentes serão detectados em `painting_entries` e permanecerão marcados como incompletos até terem quantidade por conjunto confirmada e salva. A planilha local inspecionada poderá orientar o preenchimento humano, mas não será uma fonte automática de produção nesta versão.
 
-A planilha local inspecionada contém requisitos para oito componentes do projeto PG + Economia Híbrido, mas ela não será importada sem aprovação explícita. Os componentes da referência visual que não aparecem no projeto ativo também não serão acrescentados artificialmente.
+Por aprovação explícita, a carga inicial conterá somente estes requisitos adicionais para o projeto PG + Economia Híbrido:
+
+- `CHAVE`: uma unidade por conjunto;
+- `SUPORTE FIXAÇÃO DISPLAY`: duas unidades por conjunto.
+
+Nenhum desses dois requisitos será replicado automaticamente para outros projetos.
 
 ## 13. Fora do escopo
 
 - Next.js, Sites e Cloudflare;
 - `production_entries` e `process_forecasts`;
 - alteração da área de lançamentos;
-- filtros adicionais de projeto;
+- filtros além do seletor único de projeto;
+- leitura automática ou OCR dos planos acelerados nesta versão;
 - refatorações sem relação com a entrega;
 - uso de valores da referência como dados de produção.
