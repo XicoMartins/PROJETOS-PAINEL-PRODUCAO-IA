@@ -19,6 +19,10 @@ from weekly_control import (
 )
 
 
+class ProjectIdentityConflictError(RuntimeError):
+    """Raised when distinct source identities collapse to one canonical key."""
+
+
 @dataclass(frozen=True)
 class ProjectOption:
     key: str
@@ -67,6 +71,7 @@ def list_painting_projects(db_url: str) -> tuple[ProjectOption, ...]:
             rows = cursor.fetchall()
 
     projects = []
+    identities_by_key: dict[str, ProjectIdentity] = {}
     for row in rows:
         identity = ProjectIdentity(
             cliente=str(row["cliente"]).strip(),
@@ -74,9 +79,18 @@ def list_painting_projects(db_url: str) -> tuple[ProjectOption, ...]:
             numero_display=str(row["numero_display"]).strip(),
             codigo_pintura=str(row["codigo_pintura"]).strip(),
         )
+        key = project_key(identity)
+        previous_identity = identities_by_key.get(key)
+        if previous_identity is not None and previous_identity != identity:
+            raise ProjectIdentityConflictError(
+                "A painting_entries contém identidades conflitantes para a mesma chave "
+                "canônica de projeto. Corrija as diferenças de maiúsculas ou acentuação "
+                "antes de configurar metas."
+            )
+        identities_by_key[key] = identity
         projects.append(
             ProjectOption(
-                key=project_key(identity),
+                key=key,
                 identity=identity,
                 label=_project_label(identity),
                 last_movement_at=row["last_movement_at"],

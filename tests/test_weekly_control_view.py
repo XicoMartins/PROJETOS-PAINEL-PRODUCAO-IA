@@ -1,5 +1,5 @@
 import unittest
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -96,6 +96,19 @@ class WeeklyControlViewTest(unittest.TestCase):
         self.assertNotIn("<FEMSA>", rendered)
         self.assertEqual(format_pt_br(Decimal("8517")), "8.517")
         self.assertEqual(format_pt_br(None), "—")
+
+    def test_updated_time_is_shown_in_sao_paulo(self):
+        from weekly_control_view import render_weekly_control_html
+
+        rendered = render_weekly_control_html(
+            self.identity,
+            self.previous,
+            self.current,
+            self.control,
+            datetime(2026, 8, 25, 15, tzinfo=UTC),
+        )
+
+        self.assertIn("Última atualização: 25/08/2026 12:00", rendered)
 
 
 if __name__ == "__main__":

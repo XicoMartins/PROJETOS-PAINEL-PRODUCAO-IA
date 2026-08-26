@@ -1,4 +1,5 @@
 import { Client } from "pg";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,7 @@ export default async function PaintingEntriesAudit() {
           <h1>Lançamentos da painting_entries</h1>
           <p>Fonte exclusiva: tabela painting_entries. Dois projetos, sem filtro de período.</p>
         </div>
-        <a className="entries-back" href="/">← Voltar ao painel</a>
+        <Link className="entries-back" href="/">← Voltar ao painel</Link>
       </header>
 
       {error ? <section className="entries-message"><strong>Não foi possível abrir os lançamentos.</strong><br />{error}</section> : null}

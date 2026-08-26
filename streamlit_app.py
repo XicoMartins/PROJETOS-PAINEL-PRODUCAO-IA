@@ -35,6 +35,7 @@ from weekly_control import (
     weekly_periods,
 )
 from weekly_control_data import (
+    ProjectIdentityConflictError,
     WeeklySourceData,
     list_painting_projects,
     load_weekly_source,
@@ -1228,6 +1229,8 @@ def weekly_control_panel() -> None:
             source.entries,
         )
         warnings = list(source.warnings)
+        if not source.entries:
+            warnings.append("Nenhum movimento reconhecido para o projeto selecionado.")
         if source.previous_target is None:
             warnings.append("Meta acumulada da semana passada não cadastrada.")
         if source.current_target is None:
@@ -1250,6 +1253,14 @@ def weekly_control_panel() -> None:
         )
         render_target_editor(db_url, selected.identity, current_period, source)
         render_requirement_editor(db_url, selected.identity, requirements)
+    except ProjectIdentityConflictError:
+        st.markdown(
+            render_weekly_empty_html(
+                "Identidades de projeto conflitantes",
+                "Padronize cliente, display, número e código de pintura na painting_entries.",
+            ),
+            unsafe_allow_html=True,
+        )
     except psycopg.errors.UndefinedTable:
         st.markdown(
             render_weekly_empty_html(
@@ -1258,11 +1269,11 @@ def weekly_control_panel() -> None:
             ),
             unsafe_allow_html=True,
         )
-    except Exception as exc:
+    except Exception:
         st.markdown(
             render_weekly_empty_html(
                 "Não foi possível carregar o controle semanal",
-                str(exc),
+                "Tente novamente em alguns instantes.",
             ),
             unsafe_allow_html=True,
         )
@@ -1329,8 +1340,8 @@ def render_target_editor(db_url, identity, current_period, source) -> None:
         except ValueError as exc:
             st.warning(str(exc))
             return
-        except Exception as exc:
-            st.error(f"Não foi possível salvar a meta: {exc}")
+        except Exception:
+            st.error("Não foi possível salvar a meta. Tente novamente.")
             return
         load_weekly_source_cached.clear()
         st.success(
@@ -1424,8 +1435,8 @@ def render_requirement_editor(db_url, identity, requirements) -> None:
         except (ValueError, InvalidOperation) as exc:
             st.warning(str(exc))
             return
-        except Exception as exc:
-            st.error(f"Não foi possível salvar os componentes: {exc}")
+        except Exception:
+            st.error("Não foi possível salvar os componentes. Tente novamente.")
             return
         load_weekly_source_cached.clear()
         st.success("Componentes do projeto salvos.")

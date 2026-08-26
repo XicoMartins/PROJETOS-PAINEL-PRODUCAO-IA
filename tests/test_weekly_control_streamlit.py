@@ -13,7 +13,7 @@ from weekly_control import (
     WeekPeriod,
     project_key,
 )
-from weekly_control_data import ProjectOption, WeeklySourceData
+from weekly_control_data import ProjectIdentityConflictError, ProjectOption, WeeklySourceData
 
 
 class WeeklyNavigationTest(unittest.TestCase):
@@ -109,6 +109,33 @@ class WeeklyPanelStateTest(unittest.TestCase):
         )
         self.assertTrue(any("PG + ECONOMIA HIBRIDO" in block for block in rendered_blocks))
 
+    def test_project_without_recognized_movements_has_an_explicit_warning(self):
+        instant = datetime(2026, 8, 25, 12, tzinfo=ZoneInfo("America/Sao_Paulo"))
+        identity = ProjectIdentity("FEMSA", "DISPLAY", "1", "VM - 1000")
+        option = ProjectOption(project_key(identity), identity, "FEMSA · DISPLAY", instant)
+        source = WeeklySourceData(
+            previous_target=0,
+            current_target=0,
+            requirements=(),
+            entries=(),
+            detected_component_keys=(),
+            updated_at=None,
+            warnings=(),
+        )
+        with (
+            patch.object(streamlit_app, "database_url", return_value="postgresql://database"),
+            patch.object(streamlit_app, "load_weekly_projects_cached", return_value=(option,)),
+            patch.object(streamlit_app, "load_weekly_source_cached", return_value=source),
+            patch.object(streamlit_app.st, "selectbox", return_value=option.key),
+            patch.object(streamlit_app, "render_target_editor"),
+            patch.object(streamlit_app, "render_requirement_editor"),
+            patch.object(streamlit_app.st, "markdown") as markdown,
+        ):
+            streamlit_app.weekly_control_panel()
+
+        rendered = markdown.call_args.args[0]
+        self.assertIn("Nenhum movimento reconhecido para o projeto selecionado", rendered)
+
     def test_missing_weekly_tables_has_a_specific_migration_state(self):
         instant = datetime(2026, 8, 25, 12, tzinfo=ZoneInfo("America/Sao_Paulo"))
         identity = ProjectIdentity("FEMSA", "DISPLAY", "1", "VM - 1000")
@@ -133,6 +160,38 @@ class WeeklyPanelStateTest(unittest.TestCase):
 
         rendered = markdown.call_args.args[0]
         self.assertIn("Estrutura semanal ainda não configurada", rendered)
+
+    def test_database_failure_does_not_expose_connection_details(self):
+        with (
+            patch.object(streamlit_app, "database_url", return_value="postgresql://database"),
+            patch.object(
+                streamlit_app,
+                "load_weekly_projects_cached",
+                side_effect=RuntimeError("password=segredo host=interno"),
+            ),
+            patch.object(streamlit_app.st, "markdown") as markdown,
+        ):
+            streamlit_app.weekly_control_panel()
+
+        rendered = markdown.call_args.args[0]
+        self.assertIn("Tente novamente em alguns instantes", rendered)
+        self.assertNotIn("segredo", rendered)
+
+    def test_conflicting_project_identity_has_a_specific_state(self):
+        with (
+            patch.object(streamlit_app, "database_url", return_value="postgresql://database"),
+            patch.object(
+                streamlit_app,
+                "load_weekly_projects_cached",
+                side_effect=ProjectIdentityConflictError("conflito interno"),
+            ),
+            patch.object(streamlit_app.st, "markdown") as markdown,
+        ):
+            streamlit_app.weekly_control_panel()
+
+        rendered = markdown.call_args.args[0]
+        self.assertIn("Identidades de projeto conflitantes", rendered)
+        self.assertIn("Padronize", rendered)
 
     def test_detected_components_fill_free_orders_before_manual_chave_and_suporte(self):
         source = WeeklySourceData(
@@ -293,6 +352,39 @@ class WeeklyEditorTest(unittest.TestCase):
 
         save.assert_not_called()
         warning.assert_called_once_with("Confirme a gravação dos requisitos.")
+
+    def test_target_write_failure_does_not_expose_database_details(self):
+        identity = ProjectIdentity("FEMSA", "DISPLAY", "1", "VM - 1000")
+        period = WeekPeriod(
+            datetime(2026, 8, 24).date(),
+            datetime(2026, 8, 28).date(),
+        )
+        context = MagicMock()
+        with (
+            patch.object(streamlit_app.st, "expander", return_value=context),
+            patch.object(streamlit_app.st, "form", return_value=context),
+            patch.object(streamlit_app.st, "caption"),
+            patch.object(streamlit_app.st, "date_input", return_value=period.end),
+            patch.object(streamlit_app.st, "number_input", return_value=501),
+            patch.object(streamlit_app.st, "checkbox", return_value=True),
+            patch.object(streamlit_app.st, "form_submit_button", return_value=True),
+            patch.object(
+                streamlit_app,
+                "save_weekly_target",
+                side_effect=RuntimeError("password=segredo host=interno"),
+            ),
+            patch.object(streamlit_app.st, "error") as error,
+        ):
+            streamlit_app.render_target_editor(
+                "postgresql://database",
+                identity,
+                period,
+                MagicMock(current_target=501),
+            )
+
+        message = error.call_args.args[0]
+        self.assertEqual("Não foi possível salvar a meta. Tente novamente.", message)
+        self.assertNotIn("segredo", message)
 
 
 if __name__ == "__main__":

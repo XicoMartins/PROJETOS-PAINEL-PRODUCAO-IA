@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from weekly_control import (
+    SAO_PAULO,
     ProjectIdentity,
     WeekPeriod,
     WeeklyComponent,
@@ -285,9 +286,15 @@ def render_weekly_control_html(
         if warnings
         else ""
     )
-    updated = (
-        updated_at.strftime("%d/%m/%Y %H:%M") if updated_at is not None else "não disponível"
-    )
+    if updated_at is None:
+        updated = "não disponível"
+    else:
+        localized = (
+            updated_at.replace(tzinfo=SAO_PAULO)
+            if updated_at.tzinfo is None
+            else updated_at.astimezone(SAO_PAULO)
+        )
+        updated = localized.strftime("%d/%m/%Y %H:%M")
     project_title = f"{identity.display} · Pintura externa"
     identity_line = (
         f"{identity.cliente} · Nº {identity.numero_display} · {identity.codigo_pintura}"

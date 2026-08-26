@@ -115,6 +115,35 @@ class WeeklyProjectRepositoryTest(unittest.TestCase):
         self.assertIn("GROUP BY cliente, display, numero_display, codigo_pintura", sql)
         self.assertEqual(params, ())
 
+    def test_rejects_distinct_identities_that_share_the_same_canonical_key(self):
+        from weekly_control_data import list_painting_projects
+
+        instant = datetime(2026, 8, 25, 12, tzinfo=ZoneInfo("America/Sao_Paulo"))
+        connection = FakeConnection(
+            [
+                {
+                    "cliente": "FEMSA",
+                    "display": "PG + ECONOMIA HÍBRIDO",
+                    "numero_display": "26081000",
+                    "codigo_pintura": "VM - 1000",
+                    "last_movement_at": instant,
+                },
+                {
+                    "cliente": "femsa",
+                    "display": "PG + ECONOMIA HIBRIDO",
+                    "numero_display": "26081000",
+                    "codigo_pintura": "VM - 1000",
+                    "last_movement_at": instant,
+                },
+            ]
+        )
+
+        with (
+            patch("weekly_control_data.psycopg.connect", return_value=connection),
+            self.assertRaisesRegex(RuntimeError, "identidades conflitantes"),
+        ):
+            list_painting_projects("postgresql://database")
+
 
 class WeeklySourceRepositoryTest(unittest.TestCase):
     def test_loads_targets_requirements_and_only_the_selected_project_movements(self):
