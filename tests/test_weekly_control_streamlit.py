@@ -57,11 +57,11 @@ class WeeklyNavigationTest(unittest.TestCase):
 
         rendered_css = markdown.call_args_list[0].args[0]
         self.assertIn(
-            'button[data-baseweb="tab"] { color: var(--ink) !important;',
+            '[data-testid="stTab"] { color: var(--ink) !important;',
             rendered_css,
         )
         self.assertIn(
-            'button[data-baseweb="tab"][aria-selected="true"] { color: var(--red) !important;',
+            '[data-testid="stTab"][aria-selected="true"] { color: var(--red) !important;',
             rendered_css,
         )
 
