@@ -44,22 +44,17 @@ WEEKLY_CONTROL_CSS = """
     gap: 22px;
     padding: 19px 24px 17px;
   }
-  .weekly-kicker {
-    color: #ffbbc0;
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: 1.5px;
-  }
   .weekly-hero h1 {
     font-size: clamp(24px, 2.1vw, 35px);
     line-height: 1.05;
-    margin: 7px 0 6px;
+    margin: 0 0 6px;
     text-transform: uppercase;
   }
   .weekly-subtitle { color: #d8dcdf; font-size: 14px; font-weight: 700; }
   .weekly-project { align-self: center; max-width: 400px; text-align: right; }
   .weekly-project strong { display: block; font-size: 17px; }
   .weekly-project span { color: #cbd0d3; display: block; font-size: 12px; margin-top: 4px; }
+  .weekly-project .weekly-updated { color: #f0f2f3; font-size: 11px; font-weight: 800; margin-top: 10px; }
   .weekly-panels {
     display: grid;
     gap: 14px;
@@ -77,7 +72,7 @@ WEEKLY_CONTROL_CSS = """
   }
   .weekly-panel-current .weekly-panel-head { border-color: var(--weekly-teal); }
   .weekly-panel-head h2 { font-size: 21px; margin: 0; text-transform: uppercase; }
-  .weekly-panel-head p { color: #666; font-size: 12px; margin: 3px 0 0; }
+  .weekly-panel-head .weekly-period { color: #51565a; font-size: 14px; margin: 5px 0 0; }
   .weekly-target {
     background: #f3e8ea;
     color: var(--weekly-wine);
@@ -100,6 +95,7 @@ WEEKLY_CONTROL_CSS = """
     text-align: center;
   }
   .weekly-table th:first-child, .weekly-table td:first-child { text-align: left; }
+  .weekly-table th[scope="row"] { font-size: 12px; font-weight: 900; }
   .weekly-table td {
     border-bottom: 1px solid #e4e6e7;
     border-right: 1px solid #e5e7e8;
@@ -158,11 +154,11 @@ WEEKLY_CONTROL_CSS = """
     place-items: center;
   }
   .weekly-warning { background: #fff4d6; border-top: 1px solid #e8cf80; color: #6b5010; font-size: 11px; padding: 9px 15px; }
-  .weekly-updated { color: #687076; font-size: 10px; padding: 0 15px 14px; text-align: right; }
   @media (max-width: 1366px) {
     .weekly-panels { gap: 10px; padding: 10px; }
-    .weekly-panel-head h2 { font-size: 17px; }
+    .weekly-panel-head h2 { font-size: 19px; }
     .weekly-table { font-size: 10px; min-width: 560px; }
+    .weekly-table th[scope="row"] { font-size: 11px; }
   }
   @media (max-width: 700px) {
     .weekly-hero { grid-template-columns: 1fr; padding: 16px; }
@@ -254,7 +250,7 @@ def _panel(
     return f"""
     <article class="{panel_class}">
       <header class="weekly-panel-head">
-        <div><h2>{_safe(title)}</h2><p>{_safe(_date(period))}</p></div>
+        <div><h2>{_safe(title)}</h2><p class="weekly-period"><strong>{_safe(_date(period))}</strong></p></div>
         <div class="weekly-target"><span>META ACUMULADA</span><strong>{format_pt_br(target)}</strong></div>
       </header>
       <div class="weekly-table-wrap">
@@ -302,15 +298,14 @@ def render_weekly_control_html(
     body = f"""<section class="weekly-control" aria-labelledby="weekly-control-title">
       <header class="weekly-hero">
         <div>
-          <div class="weekly-kicker">MODELO 1 · EXECUTIVO INDUSTRIAL</div>
           <h1 id="weekly-control-title">Controle semanal de remessas e retornos</h1>
           <div class="weekly-subtitle">Semana encerrada × semana atual</div>
         </div>
-        <div class="weekly-project"><strong>{_safe(project_title)}</strong><span>{_safe(identity_line)}</span></div>
+        <div class="weekly-project"><strong>{_safe(project_title)}</strong><span>{_safe(identity_line)}</span><span class="weekly-updated">Última atualização: {_safe(updated)}</span></div>
       </header>
       <div class="weekly-panels">
-        {_panel('Semana passada', previous_period, control.previous_summary.target_sets, 'P/ FECHAR', 'Pendente de pintura / entrega na Mtech', 'previous', control, False)}
-        {_panel('Semana atual', current_period, control.current_summary.target_sets, 'P/ ENVIAR', 'Pendente de envio da Mtech à Multipint', 'current', control, True)}
+        {_panel('Retorno MULTIPINT', previous_period, control.previous_summary.target_sets, 'P/ FECHAR', 'Pendente de pintura / entrega na Mtech', 'previous', control, False)}
+        {_panel('Remessa MTECH', current_period, control.current_summary.target_sets, 'P/ ENVIAR', 'Pendente de envio da Mtech à Multipint', 'current', control, True)}
       </div>
       {warning_html}
       <footer class="weekly-footer">
@@ -320,7 +315,6 @@ def render_weekly_control_html(
         </div>
         <div class="weekly-next-action">Próxima ação: priorizar linhas em vermelho</div>
       </footer>
-      <div class="weekly-updated">Última atualização: {_safe(updated)}</div>
     </section>
     """
     return WEEKLY_CONTROL_CSS + "".join(line.strip() for line in body.splitlines())

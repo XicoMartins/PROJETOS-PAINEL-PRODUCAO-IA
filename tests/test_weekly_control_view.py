@@ -39,7 +39,7 @@ class WeeklyControlViewTest(unittest.TestCase):
         )
         self.updated_at = instant
 
-    def test_renders_two_semantic_week_panels_and_reference_copy(self):
+    def test_renders_the_approved_operational_panel_titles(self):
         try:
             from weekly_control_view import render_weekly_control_html
         except ModuleNotFoundError:
@@ -53,10 +53,12 @@ class WeeklyControlViewTest(unittest.TestCase):
             self.updated_at,
         )
 
-        self.assertIn("MODELO 1 · EXECUTIVO INDUSTRIAL", rendered)
+        self.assertNotIn("MODELO 1 · EXECUTIVO INDUSTRIAL", rendered)
         self.assertIn("Controle semanal de remessas e retornos", rendered)
-        self.assertIn("Semana passada", rendered)
-        self.assertIn("Semana atual", rendered)
+        self.assertIn("Retorno MULTIPINT", rendered)
+        self.assertIn("Remessa MTECH", rendered)
+        self.assertNotIn("Semana passada", rendered)
+        self.assertNotIn("Semana atual", rendered)
         self.assertIn("P/ FECHAR", rendered)
         self.assertIn("P/ ENVIAR", rendered)
         self.assertEqual(rendered.count("<thead>"), 2)
@@ -66,6 +68,26 @@ class WeeklyControlViewTest(unittest.TestCase):
         self.assertNotIn("</style>\n\n    <section", rendered)
         html_body = rendered.split("</style>", 1)[1]
         self.assertIsNone(re.search(r"(?m)^\s{4,}<", html_body))
+
+    def test_renders_week_periods_in_bold(self):
+        from weekly_control_view import render_weekly_control_html
+
+        rendered = render_weekly_control_html(
+            self.identity,
+            self.previous,
+            self.current,
+            self.control,
+            self.updated_at,
+        )
+
+        self.assertIn(
+            '<p class="weekly-period"><strong>17/08–21/08/2026</strong></p>',
+            rendered,
+        )
+        self.assertIn(
+            '<p class="weekly-period"><strong>24/08–28/08/2026</strong></p>',
+            rendered,
+        )
 
     def test_renders_missing_values_tinta_and_textual_statuses(self):
         from weekly_control_view import render_weekly_control_html
@@ -114,6 +136,10 @@ class WeeklyControlViewTest(unittest.TestCase):
         )
 
         self.assertIn("Última atualização: 25/08/2026 12:00", rendered)
+        self.assertLess(
+            rendered.index("Última atualização: 25/08/2026 12:00"),
+            rendered.index('class="weekly-panels"'),
+        )
 
 
 if __name__ == "__main__":
