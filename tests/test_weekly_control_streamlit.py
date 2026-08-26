@@ -40,6 +40,31 @@ class WeeklyNavigationTest(unittest.TestCase):
         dashboard.assert_called_once_with()
         weekly.assert_called_once_with()
 
+    def test_main_injects_readable_active_and_inactive_tab_styles(self):
+        managerial_tab = MagicMock()
+        weekly_tab = MagicMock()
+        with (
+            patch.object(
+                streamlit_app.st,
+                "tabs",
+                return_value=(managerial_tab, weekly_tab),
+            ),
+            patch.object(streamlit_app, "dashboard_fragment"),
+            patch.object(streamlit_app, "weekly_control_panel"),
+            patch.object(streamlit_app.st, "markdown") as markdown,
+        ):
+            streamlit_app.main()
+
+        rendered_css = markdown.call_args_list[0].args[0]
+        self.assertIn(
+            'button[data-baseweb="tab"] { color: var(--ink) !important;',
+            rendered_css,
+        )
+        self.assertIn(
+            'button[data-baseweb="tab"][aria-selected="true"] { color: var(--red) !important;',
+            rendered_css,
+        )
+
 
 class WeeklyPanelStateTest(unittest.TestCase):
     def test_empty_project_catalog_has_an_explicit_state(self):

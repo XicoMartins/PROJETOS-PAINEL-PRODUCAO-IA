@@ -77,6 +77,10 @@ CSS = """
   .stApp { background: #eaf1f6; color: var(--ink); font-family: Arial, Aptos, "Segoe UI", sans-serif; }
   [data-testid="stHeader"], [data-testid="stToolbar"], footer { display: none !important; }
   .block-container { max-width: 1720px; padding: 10px 14px 26px; }
+  button[data-baseweb="tab"] { color: var(--ink) !important; font-weight: 800; border-radius: 8px 8px 0 0; }
+  button[data-baseweb="tab"] p { color: inherit !important; font-weight: 800; }
+  button[data-baseweb="tab"]:hover { background: #dcecf8; color: var(--navy) !important; }
+  button[data-baseweb="tab"][aria-selected="true"] { color: var(--red) !important; font-weight: 900; }
   .report-shell {
     background: #fff; border: 1px solid #cfdbe5; border-radius: 4px;
     box-shadow: 0 9px 28px rgba(11, 46, 83, .10); padding: 13px 15px 12px;
