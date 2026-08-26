@@ -61,6 +61,8 @@ class WeeklyControlViewTest(unittest.TestCase):
         self.assertEqual(rendered.count("<thead>"), 2)
         self.assertGreaterEqual(rendered.count('scope="col"'), 12)
         self.assertIn("Próxima ação: priorizar linhas em vermelho", rendered)
+        self.assertIn("</style>\n<section", rendered)
+        self.assertNotIn("</style>\n\n    <section", rendered)
 
     def test_renders_missing_values_tinta_and_textual_statuses(self):
         from weekly_control_view import render_weekly_control_html
