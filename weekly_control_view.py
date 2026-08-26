@@ -299,7 +299,7 @@ def render_weekly_control_html(
     identity_line = (
         f"{identity.cliente} · Nº {identity.numero_display} · {identity.codigo_pintura}"
     )
-    return WEEKLY_CONTROL_CSS + f"""<section class="weekly-control" aria-labelledby="weekly-control-title">
+    body = f"""<section class="weekly-control" aria-labelledby="weekly-control-title">
       <header class="weekly-hero">
         <div>
           <div class="weekly-kicker">MODELO 1 · EXECUTIVO INDUSTRIAL</div>
@@ -323,6 +323,7 @@ def render_weekly_control_html(
       <div class="weekly-updated">Última atualização: {_safe(updated)}</div>
     </section>
     """
+    return WEEKLY_CONTROL_CSS + "".join(line.strip() for line in body.splitlines())
 
 
 def render_weekly_empty_html(title: str, message: str) -> str:
