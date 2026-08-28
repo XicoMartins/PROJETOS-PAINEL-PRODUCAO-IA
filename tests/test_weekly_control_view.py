@@ -24,6 +24,7 @@ class WeeklyControlViewTest(unittest.TestCase):
         )
         self.previous = WeekPeriod(date(2026, 8, 17), date(2026, 8, 21))
         self.current = WeekPeriod(date(2026, 8, 24), date(2026, 8, 28))
+        self.following = WeekPeriod(date(2026, 8, 31), date(2026, 9, 4))
         self.control = build_weekly_control(
             334,
             501,
@@ -74,19 +75,49 @@ class WeeklyControlViewTest(unittest.TestCase):
 
         rendered = render_weekly_control_html(
             self.identity,
-            self.previous,
             self.current,
+            self.following,
             self.control,
             self.updated_at,
         )
 
-        self.assertIn(
-            '<p class="weekly-period"><strong>17/08–21/08/2026</strong></p>',
-            rendered,
+        self.assertEqual(
+            rendered.count(
+                '<p class="weekly-period"><strong>24/08–28/08/2026</strong></p>'
+            ),
+            2,
         )
-        self.assertIn(
-            '<p class="weekly-period"><strong>24/08–28/08/2026</strong></p>',
+
+    def test_both_panels_show_current_week_while_remittance_uses_following_target(self):
+        from weekly_control_view import render_weekly_control_html
+
+        rendered = render_weekly_control_html(
+            self.identity,
+            self.current,
+            self.following,
+            self.control,
+            self.updated_at,
+        )
+
+        self.assertEqual(rendered.count("24/08–28/08/2026"), 2)
+        self.assertNotIn("31/08–04/09/2026", rendered)
+        self.assertIn("<strong>334</strong>", rendered)
+        self.assertIn("<strong>501</strong>", rendered)
+
+    def test_table_numbers_render_at_fourteen_pixels(self):
+        from weekly_control_view import render_weekly_control_html
+
+        rendered = render_weekly_control_html(
+            self.identity,
+            self.current,
+            self.following,
+            self.control,
+            self.updated_at,
+        )
+
+        self.assertRegex(
             rendered,
+            r"\.weekly-table td\s*\{[^}]*font-size:\s*14px;",
         )
 
     def test_renders_missing_values_tinta_and_textual_statuses(self):

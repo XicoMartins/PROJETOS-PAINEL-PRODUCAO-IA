@@ -1218,12 +1218,12 @@ def weekly_control_panel() -> None:
             key="weekly_control_project",
         )
         selected = by_key[selected_key]
-        previous_period, current_period = weekly_periods()
+        current_period, following_period = weekly_periods()
         source = load_weekly_source_cached(
             db_url,
             selected.identity,
-            previous_period,
             current_period,
+            following_period,
         )
         requirements = _complete_detected_requirements(source)
         control = build_weekly_control(
@@ -1236,9 +1236,9 @@ def weekly_control_panel() -> None:
         if not source.entries:
             warnings.append("Nenhum movimento reconhecido para o projeto selecionado.")
         if source.previous_target is None:
-            warnings.append("Meta acumulada da semana passada não cadastrada.")
-        if source.current_target is None:
             warnings.append("Meta acumulada da semana atual não cadastrada.")
+        if source.current_target is None:
+            warnings.append("Meta acumulada da próxima semana não cadastrada.")
         warnings.extend(
             f"Quantidade por conjunto ausente: {requirement.display_name}."
             for requirement in requirements
@@ -1248,14 +1248,14 @@ def weekly_control_panel() -> None:
         st.markdown(
             render_weekly_control_html(
                 selected.identity,
-                previous_period,
                 current_period,
+                following_period,
                 control,
                 source.updated_at,
             ),
             unsafe_allow_html=True,
         )
-        render_target_editor(db_url, selected.identity, current_period, source)
+        render_target_editor(db_url, selected.identity, following_period, source)
         render_requirement_editor(db_url, selected.identity, requirements)
     except ProjectIdentityConflictError:
         st.markdown(

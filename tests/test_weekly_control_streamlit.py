@@ -111,6 +111,14 @@ class WeeklyPanelStateTest(unittest.TestCase):
             updated_at=instant,
             warnings=(),
         )
+        current = WeekPeriod(
+            datetime(2026, 8, 24).date(),
+            datetime(2026, 8, 28).date(),
+        )
+        following = WeekPeriod(
+            datetime(2026, 8, 31).date(),
+            datetime(2026, 9, 4).date(),
+        )
 
         with (
             patch.object(streamlit_app, "database_url", return_value="postgresql://database"),
@@ -122,7 +130,16 @@ class WeeklyPanelStateTest(unittest.TestCase):
                 create=True,
             ),
             patch.object(streamlit_app.st, "selectbox", return_value=option.key),
-            patch.object(streamlit_app, "render_target_editor", create=True),
+            patch.object(
+                streamlit_app,
+                "weekly_periods",
+                return_value=(current, following),
+            ),
+            patch.object(
+                streamlit_app,
+                "render_target_editor",
+                create=True,
+            ) as target_editor,
             patch.object(streamlit_app, "render_requirement_editor", create=True),
             patch.object(streamlit_app.st, "markdown") as markdown,
         ):
@@ -133,6 +150,7 @@ class WeeklyPanelStateTest(unittest.TestCase):
             any("Controle semanal de remessas e retornos" in block for block in rendered_blocks)
         )
         self.assertTrue(any("PG + ECONOMIA HIBRIDO" in block for block in rendered_blocks))
+        self.assertEqual(target_editor.call_args.args[2], following)
 
     def test_project_without_recognized_movements_has_an_explicit_warning(self):
         instant = datetime(2026, 8, 25, 12, tzinfo=ZoneInfo("America/Sao_Paulo"))

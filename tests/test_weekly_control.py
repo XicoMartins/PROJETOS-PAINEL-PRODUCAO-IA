@@ -32,20 +32,20 @@ class WeeklyIdentityTest(unittest.TestCase):
 
 
 class WeeklyCalendarTest(unittest.TestCase):
-    def test_periods_are_monday_to_friday_in_sao_paulo(self):
+    def test_periods_are_current_and_next_monday_to_friday_in_sao_paulo(self):
         from weekly_control import weekly_periods
 
-        previous, current = weekly_periods(
+        current, following = weekly_periods(
             datetime(2026, 8, 25, 12, tzinfo=ZoneInfo("America/Sao_Paulo"))
         )
 
         self.assertEqual(
-            (previous.start, previous.end),
-            (date(2026, 8, 17), date(2026, 8, 21)),
-        )
-        self.assertEqual(
             (current.start, current.end),
             (date(2026, 8, 24), date(2026, 8, 28)),
+        )
+        self.assertEqual(
+            (following.start, following.end),
+            (date(2026, 8, 31), date(2026, 9, 4)),
         )
 
     def test_normalizes_any_selected_day_to_its_monday_and_friday(self):

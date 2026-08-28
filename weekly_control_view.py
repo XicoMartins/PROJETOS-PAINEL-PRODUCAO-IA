@@ -99,6 +99,7 @@ WEEKLY_CONTROL_CSS = """
   .weekly-table td {
     border-bottom: 1px solid #e4e6e7;
     border-right: 1px solid #e5e7e8;
+    font-size: 14px;
     padding: 7px;
     text-align: center;
     vertical-align: middle;
@@ -299,13 +300,13 @@ def render_weekly_control_html(
       <header class="weekly-hero">
         <div>
           <h1 id="weekly-control-title">Controle semanal de remessas e retornos</h1>
-          <div class="weekly-subtitle">Semana encerrada × semana atual</div>
+          <div class="weekly-subtitle">Período operacional vigente</div>
         </div>
         <div class="weekly-project"><strong>{_safe(project_title)}</strong><span>{_safe(identity_line)}</span><span class="weekly-updated">Última atualização: {_safe(updated)}</span></div>
       </header>
       <div class="weekly-panels">
         {_panel('Retorno MULTIPINT', previous_period, control.previous_summary.target_sets, 'P/ FECHAR', 'Pendente de pintura / entrega na Mtech', 'previous', control, False)}
-        {_panel('Remessa MTECH', current_period, control.current_summary.target_sets, 'P/ ENVIAR', 'Pendente de envio da Mtech à Multipint', 'current', control, True)}
+        {_panel('Remessa MTECH', previous_period, control.current_summary.target_sets, 'P/ ENVIAR', 'Pendente de envio da Mtech à Multipint', 'current', control, True)}
       </div>
       {warning_html}
       <footer class="weekly-footer">

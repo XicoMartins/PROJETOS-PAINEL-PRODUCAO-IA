@@ -99,8 +99,8 @@ def weekly_periods(now: datetime | None = None) -> tuple[WeekPeriod, WeekPeriod]
     else:
         instant = instant.astimezone(SAO_PAULO)
     current = week_period_for_date(instant.date())
-    previous = week_period_for_date(current.start - timedelta(days=7))
-    return previous, current
+    following = week_period_for_date(current.start + timedelta(days=7))
+    return current, following
 
 
 def week_period_for_date(day: date) -> WeekPeriod:
