@@ -138,6 +138,53 @@ class WeeklyControlViewTest(unittest.TestCase):
         self.assertIn("—", rendered)
         self.assertLess(rendered.index("CHAVE"), rendered.index("TINTA VM"))
 
+    def test_return_panel_places_p_to_send_before_p_to_close_with_status_colors(self):
+        from weekly_control_view import render_weekly_control_html
+
+        instant = datetime(2026, 9, 2, 12, tzinfo=ZoneInfo("America/Sao_Paulo"))
+        control = build_weekly_control(
+            334,
+            501,
+            (
+                ComponentRequirement("NEGATIVO", "NEGATIVO", Decimal("1"), 1, True),
+                ComponentRequirement("POSITIVO", "POSITIVO", Decimal("1"), 2, True),
+            ),
+            (
+                MovementEntry("NEGATIVO", "remessa", Decimal("300"), instant),
+                MovementEntry("NEGATIVO", "retorno", Decimal("350"), instant),
+                MovementEntry("POSITIVO", "remessa", Decimal("400"), instant),
+                MovementEntry("POSITIVO", "retorno", Decimal("300"), instant),
+            ),
+        )
+
+        rendered = render_weekly_control_html(
+            self.identity,
+            self.current,
+            self.following,
+            control,
+            instant,
+        )
+        tables = re.findall(r'<table class="weekly-table">(.*?)</table>', rendered)
+        return_headers = re.findall(r'<th scope="col">([^<]+)</th>', tables[0])
+        remittance_headers = re.findall(r'<th scope="col">([^<]+)</th>', tables[1])
+        return_balances = re.findall(
+            r'<td class="weekly-target-balance ([^"]*)">([^<]+)',
+            tables[0],
+        )
+
+        self.assertEqual(
+            return_headers,
+            ["COMPONENTE", "QT/DY", "REMESSA", "RETORNO", "SALDO", "P/ ENVIAR", "P/ FECHAR"],
+        )
+        self.assertEqual(
+            remittance_headers,
+            ["COMPONENTE", "QT/DY", "REMESSA", "RETORNO", "SALDO", "P/ ENVIAR"],
+        )
+        self.assertIn("weekly-pending", return_balances[0][0])
+        self.assertEqual(return_balances[0][1], "-34")
+        self.assertIn("weekly-covered", return_balances[2][0])
+        self.assertEqual(return_balances[2][1], "66")
+
     def test_escapes_project_values_and_formats_numbers_in_pt_br(self):
         from weekly_control_view import format_pt_br, render_weekly_control_html
 

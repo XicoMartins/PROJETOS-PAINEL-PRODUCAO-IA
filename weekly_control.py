@@ -52,6 +52,7 @@ class WeeklyComponent:
     total_remessa: Decimal | None
     total_retorno: Decimal | None
     painting_balance: Decimal | None
+    return_remittance_balance: Decimal | None
     previous_balance: Decimal | None
     current_balance: Decimal | None
 
@@ -207,6 +208,11 @@ def build_weekly_control(
                 total_remessa=remessa,
                 total_retorno=retorno,
                 painting_balance=_difference(remessa, retorno),
+                return_remittance_balance=_target_balance(
+                    remessa,
+                    previous_target,
+                    requirement.quantity_per_set,
+                ),
                 previous_balance=_target_balance(
                     retorno,
                     previous_target,
@@ -231,6 +237,7 @@ def build_weekly_control(
                 totals.get((key, "remessa")),
                 totals.get((key, "retorno")),
             ),
+            return_remittance_balance=None,
             previous_balance=None,
             current_balance=None,
         )

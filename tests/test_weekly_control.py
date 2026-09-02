@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import asdict
 from datetime import date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -85,6 +86,39 @@ class WeeklyNormalizationTest(unittest.TestCase):
 
 
 class WeeklyCalculationTest(unittest.TestCase):
+    def test_return_panel_p_to_send_uses_remittance_target_and_quantity_per_set(self):
+        from weekly_control import (
+            ComponentRequirement,
+            MovementEntry,
+            build_weekly_control,
+        )
+
+        instant = datetime(2026, 9, 2, 12, tzinfo=ZoneInfo("America/Sao_Paulo"))
+        control = build_weekly_control(
+            previous_target=668,
+            current_target=835,
+            requirements=(
+                ComponentRequirement("CORPO", "CORPO", Decimal("1"), 1, True),
+                ComponentRequirement("BANDEJA P", "BANDEJA P", Decimal("4"), 2, True),
+                ComponentRequirement("SUPORTE", "SUPORTE", Decimal("2"), 3, True),
+                ComponentRequirement("SEM REMESSA", "SEM REMESSA", Decimal("1"), 4, True),
+            ),
+            entries=(
+                MovementEntry("CORPO", "remessa", Decimal("651"), instant),
+                MovementEntry("BANDEJA P", "remessa", Decimal("2800"), instant),
+                MovementEntry("SUPORTE", "remessa", Decimal("1010"), instant),
+            ),
+        )
+
+        values = {
+            row.component_key: asdict(row).get("return_remittance_balance")
+            for row in control.components
+        }
+        self.assertEqual(values["CORPO"], Decimal("-17"))
+        self.assertEqual(values["BANDEJA P"], Decimal("128"))
+        self.assertEqual(values["SUPORTE"], Decimal("-326"))
+        self.assertIsNone(values["SEM REMESSA"])
+
     def test_applies_previous_and_current_accumulated_target_formulas(self):
         from weekly_control import (
             ComponentRequirement,

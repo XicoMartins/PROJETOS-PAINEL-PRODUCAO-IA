@@ -207,9 +207,19 @@ def _balance_cell(value: Decimal | None, extra_class: str = "") -> str:
     )
 
 
-def _row(row: WeeklyComponent, target_side: str, paint: bool = False) -> str:
+def _row(
+    row: WeeklyComponent,
+    target_side: str,
+    paint: bool = False,
+    include_return_remittance: bool = False,
+) -> str:
     target_balance = (
         row.previous_balance if target_side == "previous" else row.current_balance
+    )
+    return_remittance_cell = (
+        _balance_cell(row.return_remittance_balance)
+        if include_return_remittance
+        else ""
     )
     row_class = ' class="weekly-paint-row"' if paint else ""
     return (
@@ -219,6 +229,7 @@ def _row(row: WeeklyComponent, target_side: str, paint: bool = False) -> str:
         f'<td class="weekly-remittance">{format_pt_br(row.total_remessa)}</td>'
         f"<td>{format_pt_br(row.total_retorno)}</td>"
         f'<td class="weekly-balance">{format_pt_br(row.painting_balance)}</td>'
+        f"{return_remittance_cell}"
         f"{_balance_cell(target_balance)}"
         "</tr>"
     )
@@ -244,8 +255,20 @@ def _panel(
     control: WeeklyControl,
     current: bool,
 ) -> str:
-    rows = "".join(_row(row, target_side) for row in control.components)
-    rows += "".join(_row(row, target_side, paint=True) for row in control.paint_rows)
+    include_return_remittance = not current
+    rows = "".join(
+        _row(row, target_side, include_return_remittance=include_return_remittance)
+        for row in control.components
+    )
+    rows += "".join(
+        _row(
+            row,
+            target_side,
+            paint=True,
+            include_return_remittance=include_return_remittance,
+        )
+        for row in control.paint_rows
+    )
     summary = control.current_summary if current else control.previous_summary
     panel_class = "weekly-panel weekly-panel-current" if current else "weekly-panel"
     return f"""
@@ -259,7 +282,7 @@ def _panel(
           <thead><tr>
             <th scope="col">COMPONENTE</th><th scope="col">QT/DY</th>
             <th scope="col">REMESSA</th><th scope="col">RETORNO</th>
-            <th scope="col">SALDO</th><th scope="col">{_safe(target_header)}</th>
+            <th scope="col">SALDO</th>{'<th scope="col">P/ ENVIAR</th>' if include_return_remittance else ''}<th scope="col">{_safe(target_header)}</th>
           </tr></thead>
           <tbody>{rows}</tbody>
         </table>
