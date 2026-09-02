@@ -89,26 +89,35 @@ WEEKLY_CONTROL_CSS = """
     display: inline-block;
     height: 1em;
     margin-left: .22em;
-    max-height: 24px;
-    max-width: 120px;
+    max-height: 34px;
+    max-width: 170px;
     vertical-align: -.16em;
   }
   .weekly-brand-logo-mtech { width: 3.43em; }
   .weekly-brand-logo-multipint { height: 1.35em; width: 3.39em; }
+  .weekly-panel-head .weekly-brand-logo { height: 34px; }
+  .weekly-panel-head .weekly-brand-logo-mtech { width: 117px; }
+  .weekly-panel-head .weekly-brand-logo-multipint { width: 85px; }
   .weekly-table th .weekly-brand-logo {
     background-color: white;
     border-radius: 3px;
+    height: 20px;
     margin-left: 2px;
-    max-height: 14px;
-    max-width: 54px;
+    max-height: 20px;
+    max-width: 78px;
     padding: 1px 2px;
     vertical-align: -.35em;
   }
+  .weekly-table th .weekly-brand-logo-mtech { width: 69px; }
+  .weekly-table th .weekly-brand-logo-multipint { width: 50px; }
   .weekly-explanation .weekly-brand-logo {
-    max-height: 13px;
-    max-width: 48px;
+    height: 18px;
+    max-height: 18px;
+    max-width: 68px;
     vertical-align: -.28em;
   }
+  .weekly-explanation .weekly-brand-logo-mtech { width: 62px; }
+  .weekly-explanation .weekly-brand-logo-multipint { width: 45px; }
   .weekly-panel-head .weekly-period { color: #51565a; font-size: 14px; margin: 5px 0 0; }
   .weekly-target {
     background: #f3e8ea;
@@ -204,6 +213,15 @@ WEEKLY_CONTROL_CSS = """
     .weekly-panels { grid-template-columns: 1fr; }
     .weekly-footer { grid-template-columns: 1fr; }
     .weekly-next-action { min-width: 0; }
+    .weekly-panel-head .weekly-brand-logo { height: 28px; }
+    .weekly-panel-head .weekly-brand-logo-mtech { width: 96px; }
+    .weekly-panel-head .weekly-brand-logo-multipint { width: 70px; }
+    .weekly-table th .weekly-brand-logo { height: 18px; }
+    .weekly-table th .weekly-brand-logo-mtech { width: 62px; }
+    .weekly-table th .weekly-brand-logo-multipint { width: 45px; }
+    .weekly-explanation .weekly-brand-logo { height: 16px; }
+    .weekly-explanation .weekly-brand-logo-mtech { width: 55px; }
+    .weekly-explanation .weekly-brand-logo-multipint { width: 40px; }
   }
 </style>
 """

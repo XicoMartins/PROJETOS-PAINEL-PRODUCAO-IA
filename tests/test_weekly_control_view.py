@@ -81,7 +81,7 @@ class WeeklyControlViewTest(unittest.TestCase):
         html_body = rendered.split("</style>", 1)[1]
         self.assertIsNone(re.search(r"(?m)^\s{4,}<", html_body))
 
-    def test_replaces_all_weekly_brand_names_with_proportional_logos(self):
+    def test_replaces_all_weekly_brand_names_with_large_proportional_logos(self):
         from weekly_control_view import render_weekly_control_html
 
         rendered = render_weekly_control_html(
@@ -110,8 +110,48 @@ class WeeklyControlViewTest(unittest.TestCase):
         )
         self.assertEqual(rendered.count("data:image/png;base64,"), 2)
         self.assertIn("background-size: contain", rendered)
-        self.assertIn("max-height: 24px", rendered)
-        self.assertIn("max-height: 14px", rendered)
+        self.assertRegex(
+            rendered,
+            r"\.weekly-panel-head \.weekly-brand-logo\s*\{[^}]*height:\s*34px;",
+        )
+        self.assertIn("max-height: 34px", rendered)
+        self.assertIn("max-width: 170px", rendered)
+        self.assertRegex(
+            rendered,
+            r"\.weekly-table th \.weekly-brand-logo\s*\{[^}]*height:\s*20px;",
+        )
+        self.assertIn("max-height: 20px", rendered)
+        self.assertIn("max-width: 78px", rendered)
+        self.assertRegex(
+            rendered,
+            r"\.weekly-explanation \.weekly-brand-logo\s*\{[^}]*height:\s*18px;",
+        )
+        self.assertIn("max-height: 18px", rendered)
+        self.assertIn("max-width: 68px", rendered)
+        self.assertIn(
+            ".weekly-panel-head .weekly-brand-logo { height: 28px; }",
+            rendered,
+        )
+        self.assertIn(
+            ".weekly-explanation .weekly-brand-logo { height: 16px; }",
+            rendered,
+        )
+        for proportional_rule in (
+            ".weekly-panel-head .weekly-brand-logo-mtech { width: 117px; }",
+            ".weekly-panel-head .weekly-brand-logo-multipint { width: 85px; }",
+            ".weekly-table th .weekly-brand-logo-mtech { width: 69px; }",
+            ".weekly-table th .weekly-brand-logo-multipint { width: 50px; }",
+            ".weekly-explanation .weekly-brand-logo-mtech { width: 62px; }",
+            ".weekly-explanation .weekly-brand-logo-multipint { width: 45px; }",
+            ".weekly-panel-head .weekly-brand-logo-mtech { width: 96px; }",
+            ".weekly-panel-head .weekly-brand-logo-multipint { width: 70px; }",
+            ".weekly-table th .weekly-brand-logo { height: 18px; }",
+            ".weekly-table th .weekly-brand-logo-mtech { width: 62px; }",
+            ".weekly-table th .weekly-brand-logo-multipint { width: 45px; }",
+            ".weekly-explanation .weekly-brand-logo-mtech { width: 55px; }",
+            ".weekly-explanation .weekly-brand-logo-multipint { width: 40px; }",
+        ):
+            self.assertIn(proportional_rule, rendered)
 
     def test_logo_assets_are_valid_proportional_and_web_sized(self):
         logo_dir = Path(__file__).resolve().parents[1] / "assets" / "logos"
