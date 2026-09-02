@@ -1,8 +1,12 @@
 import re
+import tempfile
 import unittest
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 from zoneinfo import ZoneInfo
+
+from PIL import Image
 
 from weekly_control import (
     ComponentRequirement,
@@ -11,6 +15,15 @@ from weekly_control import (
     WeekPeriod,
     build_weekly_control,
 )
+
+
+def accessible_text(markup: str) -> str:
+    with_brand_names = re.sub(
+        r'<span[^>]*aria-label="([^"]+)"[^>]*></span>',
+        r"\1",
+        markup,
+    )
+    return re.sub(r"<[^>]+>", "", with_brand_names).strip()
 
 
 class WeeklyControlViewTest(unittest.TestCase):
@@ -56,12 +69,10 @@ class WeeklyControlViewTest(unittest.TestCase):
 
         self.assertNotIn("MODELO 1 · EXECUTIVO INDUSTRIAL", rendered)
         self.assertIn("Controle semanal de remessas e retornos", rendered)
-        self.assertIn("Retorno MULTIPINT", rendered)
-        self.assertIn("Remessa MTECH", rendered)
+        self.assertIn('aria-label="Multipint"', rendered)
+        self.assertIn('aria-label="MTech"', rendered)
         self.assertNotIn("Semana passada", rendered)
         self.assertNotIn("Semana atual", rendered)
-        self.assertIn("A RETORNAR MULTIPINT", rendered)
-        self.assertIn("A ENVIAR MTECH", rendered)
         self.assertEqual(rendered.count("<thead>"), 2)
         self.assertGreaterEqual(rendered.count('scope="col"'), 12)
         self.assertIn("Próxima ação: priorizar linhas em vermelho", rendered)
@@ -69,6 +80,104 @@ class WeeklyControlViewTest(unittest.TestCase):
         self.assertNotIn("</style>\n\n    <section", rendered)
         html_body = rendered.split("</style>", 1)[1]
         self.assertIsNone(re.search(r"(?m)^\s{4,}<", html_body))
+
+    def test_replaces_all_weekly_brand_names_with_proportional_logos(self):
+        from weekly_control_view import render_weekly_control_html
+
+        rendered = render_weekly_control_html(
+            self.identity,
+            self.previous,
+            self.current,
+            self.control,
+            self.updated_at,
+        )
+
+        body_without_css = re.sub(r"<style>.*?</style>", "", rendered, flags=re.S)
+        visible_text = re.sub(r"<[^>]+>", "", body_without_css)
+
+        self.assertNotRegex(visible_text, r"(?i)\bmtech\b|\bmultipint\b")
+        self.assertEqual(
+            rendered.count(
+                '<span class="weekly-brand-logo weekly-brand-logo-mtech"'
+            ),
+            5,
+        )
+        self.assertEqual(
+            rendered.count(
+                '<span class="weekly-brand-logo weekly-brand-logo-multipint"'
+            ),
+            3,
+        )
+        self.assertEqual(rendered.count("data:image/png;base64,"), 2)
+        self.assertIn("background-size: contain", rendered)
+        self.assertIn("max-height: 24px", rendered)
+        self.assertIn("max-height: 14px", rendered)
+
+    def test_logo_assets_are_valid_proportional_and_web_sized(self):
+        logo_dir = Path(__file__).resolve().parents[1] / "assets" / "logos"
+        expected_ratios = {"mtech.png": 3.43, "multipint.png": 2.51}
+
+        for filename, expected_ratio in expected_ratios.items():
+            with self.subTest(filename=filename):
+                payload = (logo_dir / filename).read_bytes()
+                self.assertEqual(payload[:8], b"\x89PNG\r\n\x1a\n")
+                with Image.open(logo_dir / filename) as logo:
+                    self.assertEqual(logo.format, "PNG")
+                    logo.load()
+                    width, height = logo.size
+                self.assertLessEqual(width, 480)
+                self.assertLessEqual(height, 200)
+                self.assertLessEqual(width * height, 100_000)
+                self.assertLessEqual(len(payload), 150_000)
+                self.assertAlmostEqual(width / height, expected_ratio, delta=0.05)
+
+    def test_empty_state_does_not_depend_on_brand_assets(self):
+        import weekly_control_view as view
+
+        original_logo_dir = view.LOGO_DIR
+        with tempfile.TemporaryDirectory() as empty_dir:
+            view.LOGO_DIR = Path(empty_dir)
+            view._logo_data_uri.cache_clear()
+            try:
+                try:
+                    rendered = view.render_weekly_empty_html(
+                        "Painel indisponível",
+                        "Tente novamente.",
+                    )
+                except OSError as exc:
+                    self.fail(f"O estado vazio depende dos arquivos de logo: {exc}")
+            finally:
+                view.LOGO_DIR = original_logo_dir
+                view._logo_data_uri.cache_clear()
+
+        self.assertIn("Painel indisponível", rendered)
+        self.assertNotIn("data:image/png;base64,", rendered)
+
+    def test_weekly_control_uses_brand_names_if_logo_files_are_missing(self):
+        import weekly_control_view as view
+
+        original_logo_dir = view.LOGO_DIR
+        with tempfile.TemporaryDirectory() as empty_dir:
+            view.LOGO_DIR = Path(empty_dir)
+            view._logo_data_uri.cache_clear()
+            try:
+                try:
+                    rendered = view.render_weekly_control_html(
+                        self.identity,
+                        self.previous,
+                        self.current,
+                        self.control,
+                        self.updated_at,
+                    )
+                except OSError as exc:
+                    self.fail(f"A recuperação sem logos falhou: {exc}")
+            finally:
+                view.LOGO_DIR = original_logo_dir
+                view._logo_data_uri.cache_clear()
+
+        self.assertIn("Retorno Multipint", rendered)
+        self.assertIn("Remessa MTech", rendered)
+        self.assertNotIn("data:image/png;base64,", rendered)
 
     def test_renders_week_periods_in_bold(self):
         from weekly_control_view import render_weekly_control_html
@@ -169,8 +278,14 @@ class WeeklyControlViewTest(unittest.TestCase):
             instant,
         )
         tables = re.findall(r'<table class="weekly-table">(.*?)</table>', rendered)
-        return_headers = re.findall(r'<th scope="col">([^<]+)</th>', tables[0])
-        remittance_headers = re.findall(r'<th scope="col">([^<]+)</th>', tables[1])
+        return_headers = [
+            accessible_text(header)
+            for header in re.findall(r'<th scope="col">(.*?)</th>', tables[0])
+        ]
+        remittance_headers = [
+            accessible_text(header)
+            for header in re.findall(r'<th scope="col">(.*?)</th>', tables[1])
+        ]
         return_balances = re.findall(
             r'<td class="weekly-target-balance ([^"]*)">([^<]+)',
             tables[0],
@@ -189,13 +304,13 @@ class WeeklyControlViewTest(unittest.TestCase):
                 "REMESSA",
                 "RETORNO",
                 "SALDO",
-                "A ENVIAR MTECH",
-                "A RETORNAR MULTIPINT",
+                "A ENVIAR MTech",
+                "A RETORNAR Multipint",
             ],
         )
         self.assertEqual(
             remittance_headers,
-            ["COMPONENTE", "QT/DY", "REMESSA", "RETORNO", "SALDO", "A ENVIAR MTECH"],
+            ["COMPONENTE", "QT/DY", "REMESSA", "RETORNO", "SALDO", "A ENVIAR MTech"],
         )
         self.assertIn("weekly-pending", return_balances[0][0])
         self.assertEqual(return_balances[0][1], "-34")

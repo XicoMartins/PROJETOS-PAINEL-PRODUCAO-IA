@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
 import html
 from datetime import datetime
 from decimal import Decimal
+from functools import lru_cache
+from pathlib import Path
 
 from weekly_control import (
     SAO_PAULO,
@@ -12,6 +15,13 @@ from weekly_control import (
     WeeklyControl,
     WeeklySummary,
 )
+
+
+LOGO_DIR = Path(__file__).resolve().parent / "assets" / "logos"
+LOGO_FILES = {
+    "mtech": ("mtech.png", "MTech"),
+    "multipint": ("multipint.png", "Multipint"),
+}
 
 
 WEEKLY_CONTROL_CSS = """
@@ -72,6 +82,33 @@ WEEKLY_CONTROL_CSS = """
   }
   .weekly-panel-current .weekly-panel-head { border-color: var(--weekly-teal); }
   .weekly-panel-head h2 { font-size: 21px; margin: 0; text-transform: uppercase; }
+  .weekly-brand-logo {
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+    display: inline-block;
+    height: 1em;
+    margin-left: .22em;
+    max-height: 24px;
+    max-width: 120px;
+    vertical-align: -.16em;
+  }
+  .weekly-brand-logo-mtech { width: 3.43em; }
+  .weekly-brand-logo-multipint { height: 1.35em; width: 3.39em; }
+  .weekly-table th .weekly-brand-logo {
+    background-color: white;
+    border-radius: 3px;
+    margin-left: 2px;
+    max-height: 14px;
+    max-width: 54px;
+    padding: 1px 2px;
+    vertical-align: -.35em;
+  }
+  .weekly-explanation .weekly-brand-logo {
+    max-height: 13px;
+    max-width: 48px;
+    vertical-align: -.28em;
+  }
   .weekly-panel-head .weekly-period { color: #51565a; font-size: 14px; margin: 5px 0 0; }
   .weekly-target {
     background: #f3e8ea;
@@ -172,6 +209,39 @@ WEEKLY_CONTROL_CSS = """
 """
 
 
+@lru_cache(maxsize=None)
+def _logo_data_uri(brand: str) -> str | None:
+    filename, _ = LOGO_FILES[brand]
+    try:
+        logo_bytes = (LOGO_DIR / filename).read_bytes()
+    except OSError:
+        return None
+    payload = base64.b64encode(logo_bytes).decode("ascii")
+    return f"data:image/png;base64,{payload}"
+
+
+def _weekly_control_css() -> str:
+    logo_rules = ""
+    for brand in LOGO_FILES:
+        data_uri = _logo_data_uri(brand)
+        if data_uri is not None:
+            logo_rules += (
+                f'.weekly-brand-logo-{brand}'
+                f'{{background-image:url("{data_uri}");}}'
+            )
+    return WEEKLY_CONTROL_CSS.replace("</style>", f"  {logo_rules}\n</style>")
+
+
+def _brand_logo(brand: str) -> str:
+    _, label = LOGO_FILES[brand]
+    if _logo_data_uri(brand) is None:
+        return _safe(label)
+    return (
+        f'<span class="weekly-brand-logo weekly-brand-logo-{brand}" '
+        f'role="img" aria-label="{_safe(label)}"></span>'
+    )
+
+
 def format_pt_br(value: Decimal | int | None) -> str:
     if value is None:
         return "—"
@@ -246,11 +316,11 @@ def _summary(summary: WeeklySummary) -> str:
 
 
 def _panel(
-    title: str,
+    title_html: str,
     period: WeekPeriod,
     target: int | None,
-    target_header: str,
-    explanation: str,
+    target_header_html: str,
+    explanation_html: str,
     target_side: str,
     control: WeeklyControl,
     current: bool,
@@ -274,7 +344,7 @@ def _panel(
     return f"""
     <article class="{panel_class}">
       <header class="weekly-panel-head">
-        <div><h2>{_safe(title)}</h2><p class="weekly-period"><strong>{_safe(_date(period))}</strong></p></div>
+        <div><h2>{title_html}</h2><p class="weekly-period"><strong>{_safe(_date(period))}</strong></p></div>
         <div class="weekly-target"><span>META ACUMULADA</span><strong>{format_pt_br(target)}</strong></div>
       </header>
       <div class="weekly-table-wrap">
@@ -282,12 +352,12 @@ def _panel(
           <thead><tr>
             <th scope="col">COMPONENTE</th><th scope="col">QT/DY</th>
             <th scope="col">REMESSA</th><th scope="col">RETORNO</th>
-            <th scope="col">SALDO</th>{'<th scope="col">A ENVIAR MTECH</th>' if include_return_remittance else ''}<th scope="col">{_safe(target_header)}</th>
+            <th scope="col">SALDO</th>{f'<th scope="col">A ENVIAR {_brand_logo("mtech")}</th>' if include_return_remittance else ''}<th scope="col">{target_header_html}</th>
           </tr></thead>
           <tbody>{rows}</tbody>
         </table>
       </div>
-      <div class="weekly-explanation">{_safe(explanation)}</div>
+      <div class="weekly-explanation">{explanation_html}</div>
       {_summary(summary)}
     </article>
     """
@@ -319,6 +389,8 @@ def render_weekly_control_html(
     identity_line = (
         f"{identity.cliente} · Nº {identity.numero_display} · {identity.codigo_pintura}"
     )
+    mtech_logo = _brand_logo("mtech")
+    multipint_logo = _brand_logo("multipint")
     body = f"""<section class="weekly-control" aria-labelledby="weekly-control-title">
       <header class="weekly-hero">
         <div>
@@ -328,8 +400,8 @@ def render_weekly_control_html(
         <div class="weekly-project"><strong>{_safe(project_title)}</strong><span>{_safe(identity_line)}</span><span class="weekly-updated">Última atualização: {_safe(updated)}</span></div>
       </header>
       <div class="weekly-panels">
-        {_panel('Retorno MULTIPINT', previous_period, control.previous_summary.target_sets, 'A RETORNAR MULTIPINT', 'Pendente de pintura / entrega na Mtech', 'previous', control, False)}
-        {_panel('Remessa MTECH', previous_period, control.current_summary.target_sets, 'A ENVIAR MTECH', 'Pendente de envio da Mtech à Multipint', 'current', control, True)}
+        {_panel(f'Retorno {multipint_logo}', previous_period, control.previous_summary.target_sets, f'A RETORNAR {multipint_logo}', f'Pendente de pintura / entrega na {mtech_logo}', 'previous', control, False)}
+        {_panel(f'Remessa {mtech_logo}', previous_period, control.current_summary.target_sets, f'A ENVIAR {mtech_logo}', f'Pendente de envio da {mtech_logo} à {multipint_logo}', 'current', control, True)}
       </div>
       {warning_html}
       <footer class="weekly-footer">
@@ -341,7 +413,7 @@ def render_weekly_control_html(
       </footer>
     </section>
     """
-    return WEEKLY_CONTROL_CSS + "".join(line.strip() for line in body.splitlines())
+    return _weekly_control_css() + "".join(line.strip() for line in body.splitlines())
 
 
 def render_weekly_empty_html(title: str, message: str) -> str:
