@@ -282,7 +282,7 @@ def _panel(
           <thead><tr>
             <th scope="col">COMPONENTE</th><th scope="col">QT/DY</th>
             <th scope="col">REMESSA</th><th scope="col">RETORNO</th>
-            <th scope="col">SALDO</th>{'<th scope="col">P/ ENVIAR</th>' if include_return_remittance else ''}<th scope="col">{_safe(target_header)}</th>
+            <th scope="col">SALDO</th>{'<th scope="col">A ENVIAR MTECH</th>' if include_return_remittance else ''}<th scope="col">{_safe(target_header)}</th>
           </tr></thead>
           <tbody>{rows}</tbody>
         </table>
@@ -328,8 +328,8 @@ def render_weekly_control_html(
         <div class="weekly-project"><strong>{_safe(project_title)}</strong><span>{_safe(identity_line)}</span><span class="weekly-updated">Última atualização: {_safe(updated)}</span></div>
       </header>
       <div class="weekly-panels">
-        {_panel('Retorno MULTIPINT', previous_period, control.previous_summary.target_sets, 'P/ FECHAR', 'Pendente de pintura / entrega na Mtech', 'previous', control, False)}
-        {_panel('Remessa MTECH', previous_period, control.current_summary.target_sets, 'P/ ENVIAR', 'Pendente de envio da Mtech à Multipint', 'current', control, True)}
+        {_panel('Retorno MULTIPINT', previous_period, control.previous_summary.target_sets, 'A RETORNAR MULTIPINT', 'Pendente de pintura / entrega na Mtech', 'previous', control, False)}
+        {_panel('Remessa MTECH', previous_period, control.current_summary.target_sets, 'A ENVIAR MTECH', 'Pendente de envio da Mtech à Multipint', 'current', control, True)}
       </div>
       {warning_html}
       <footer class="weekly-footer">

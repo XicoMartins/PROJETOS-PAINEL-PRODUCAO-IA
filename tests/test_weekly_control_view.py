@@ -60,8 +60,8 @@ class WeeklyControlViewTest(unittest.TestCase):
         self.assertIn("Remessa MTECH", rendered)
         self.assertNotIn("Semana passada", rendered)
         self.assertNotIn("Semana atual", rendered)
-        self.assertIn("P/ FECHAR", rendered)
-        self.assertIn("P/ ENVIAR", rendered)
+        self.assertIn("A RETORNAR MULTIPINT", rendered)
+        self.assertIn("A ENVIAR MTECH", rendered)
         self.assertEqual(rendered.count("<thead>"), 2)
         self.assertGreaterEqual(rendered.count('scope="col"'), 12)
         self.assertIn("Próxima ação: priorizar linhas em vermelho", rendered)
@@ -138,7 +138,7 @@ class WeeklyControlViewTest(unittest.TestCase):
         self.assertIn("—", rendered)
         self.assertLess(rendered.index("CHAVE"), rendered.index("TINTA VM"))
 
-    def test_return_panel_places_p_to_send_before_p_to_close_with_status_colors(self):
+    def test_return_panel_places_a_enviar_mtech_before_a_retornar_multipint(self):
         from weekly_control_view import render_weekly_control_html
 
         instant = datetime(2026, 9, 2, 12, tzinfo=ZoneInfo("America/Sao_Paulo"))
@@ -183,11 +183,19 @@ class WeeklyControlViewTest(unittest.TestCase):
 
         self.assertEqual(
             return_headers,
-            ["COMPONENTE", "QT/DY", "REMESSA", "RETORNO", "SALDO", "P/ ENVIAR", "P/ FECHAR"],
+            [
+                "COMPONENTE",
+                "QT/DY",
+                "REMESSA",
+                "RETORNO",
+                "SALDO",
+                "A ENVIAR MTECH",
+                "A RETORNAR MULTIPINT",
+            ],
         )
         self.assertEqual(
             remittance_headers,
-            ["COMPONENTE", "QT/DY", "REMESSA", "RETORNO", "SALDO", "P/ ENVIAR"],
+            ["COMPONENTE", "QT/DY", "REMESSA", "RETORNO", "SALDO", "A ENVIAR MTECH"],
         )
         self.assertIn("weekly-pending", return_balances[0][0])
         self.assertEqual(return_balances[0][1], "-34")
