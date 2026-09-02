@@ -148,12 +148,16 @@ class WeeklyControlViewTest(unittest.TestCase):
             (
                 ComponentRequirement("NEGATIVO", "NEGATIVO", Decimal("1"), 1, True),
                 ComponentRequirement("POSITIVO", "POSITIVO", Decimal("1"), 2, True),
+                ComponentRequirement("ZERO", "ZERO", Decimal("1"), 3, True),
+                ComponentRequirement("INCOMPLETO", "INCOMPLETO", Decimal("1"), 4, True),
             ),
             (
                 MovementEntry("NEGATIVO", "remessa", Decimal("300"), instant),
                 MovementEntry("NEGATIVO", "retorno", Decimal("350"), instant),
                 MovementEntry("POSITIVO", "remessa", Decimal("400"), instant),
                 MovementEntry("POSITIVO", "retorno", Decimal("300"), instant),
+                MovementEntry("ZERO", "remessa", Decimal("334"), instant),
+                MovementEntry("ZERO", "retorno", Decimal("334"), instant),
             ),
         )
 
@@ -171,6 +175,11 @@ class WeeklyControlViewTest(unittest.TestCase):
             r'<td class="weekly-target-balance ([^"]*)">([^<]+)',
             tables[0],
         )
+        remittance_balances = re.findall(
+            r'<td class="weekly-target-balance ([^"]*)">([^<]+)',
+            tables[1],
+        )
+        panels = re.findall(r'<article class="[^"]*">(.*?)</article>', rendered)
 
         self.assertEqual(
             return_headers,
@@ -184,6 +193,44 @@ class WeeklyControlViewTest(unittest.TestCase):
         self.assertEqual(return_balances[0][1], "-34")
         self.assertIn("weekly-covered", return_balances[2][0])
         self.assertEqual(return_balances[2][1], "66")
+        self.assertIn("weekly-covered", return_balances[4][0])
+        self.assertEqual(return_balances[4][1], "0")
+        self.assertIn("weekly-incomplete", return_balances[6][0])
+        self.assertEqual(return_balances[6][1], "—")
+        self.assertIn("Coberto", tables[0])
+        self.assertIn("Dados incompletos", tables[0])
+
+        self.assertIn("weekly-pending", remittance_balances[0][0])
+        self.assertEqual(remittance_balances[0][1], "-201")
+        self.assertIn("weekly-pending", remittance_balances[1][0])
+        self.assertEqual(remittance_balances[1][1], "-101")
+        self.assertIn("weekly-incomplete", remittance_balances[3][0])
+        self.assertEqual(remittance_balances[3][1], "—")
+
+        self.assertIn(
+            "<span>Componentes da meta</span><strong>1.336</strong>",
+            panels[0],
+        )
+        self.assertIn(
+            "<span>Peças pendentes</span><strong>34</strong>",
+            panels[0],
+        )
+        self.assertIn(
+            "<span>Referências pendentes</span><strong>1</strong>",
+            panels[0],
+        )
+        self.assertIn(
+            "<span>Componentes da meta</span><strong>2.004</strong>",
+            panels[1],
+        )
+        self.assertIn(
+            "<span>Peças pendentes</span><strong>469</strong>",
+            panels[1],
+        )
+        self.assertIn(
+            "<span>Referências pendentes</span><strong>3</strong>",
+            panels[1],
+        )
 
     def test_escapes_project_values_and_formats_numbers_in_pt_br(self):
         from weekly_control_view import format_pt_br, render_weekly_control_html
