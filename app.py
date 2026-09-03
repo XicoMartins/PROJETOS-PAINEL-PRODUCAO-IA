@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import os
 import secrets as secrets_lib
+from html import escape
 
 import streamlit as st
 
@@ -11,6 +12,7 @@ from branding import apply_branding
 from data_loader import load_data, load_painting_data
 from filters import FilterContext, apply_filters
 from painting_filters import apply_painting_filters
+from services.metrics import format_last_filtered_production
 from panel_views import (
     render_charts,
     render_data_quality,
@@ -225,6 +227,20 @@ def _render_section_title(title: str) -> None:
     st.markdown(f"## {title}")
 
 
+def build_last_production_banner(value: str) -> str:
+    return f"""
+        <div class="last-production-banner">
+            <span class="last-production-label">Última produção lançada</span>
+            <strong class="last-production-value">{escape(value)}</strong>
+        </div>
+    """
+
+
+def _render_last_filtered_production(df) -> None:
+    value = format_last_filtered_production(df)
+    st.markdown(build_last_production_banner(value), unsafe_allow_html=True)
+
+
 def _build_unfiltered_context(df) -> FilterContext:
     return FilterContext(filtered_no_operator=df.copy())
 
@@ -318,6 +334,7 @@ def main() -> None:
         render_kpis(filtered, filter_context)
     elif selected_tab == "Painel Display":
         _render_section_title("Painel Display")
+        _render_last_filtered_production(filtered)
         selected_display_subtab = st.radio(
             "Subtópicos do Painel Display",
             ["Painel", "Gráficos"],

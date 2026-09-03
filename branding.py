@@ -295,6 +295,40 @@ def apply_branding(*, show_header: bool = True, use_background: bool = True) -> 
             line-height: 1.1;
             color: #d7e4f3;
         }}
+        .last-production-banner {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin: 0.35rem 0 1rem;
+            padding: 0.85rem 1rem;
+            border: 1px solid rgba(0, 163, 163, 0.5);
+            border-left: 4px solid {PRIMARY};
+            border-radius: 10px;
+            background: rgba(0, 163, 163, 0.1);
+        }}
+        .last-production-label {{
+            color: #b9cbd0;
+            font-size: clamp(0.8rem, 0.35vw + 0.72rem, 1rem);
+            font-weight: 600;
+        }}
+        .last-production-value {{
+            color: #f5f7f8;
+            font-size: clamp(1rem, 0.45vw + 0.86rem, 1.3rem);
+            text-align: right;
+            white-space: nowrap;
+        }}
+        @media (max-width: 640px) {{
+            .last-production-banner {{
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 0.3rem;
+            }}
+            .last-production-value {{
+                text-align: left;
+                white-space: normal;
+            }}
+        }}
         .kpi-name {{
             font-size: clamp(1rem, 0.7vw + 0.8rem, 1.45rem);
             font-weight: 700;

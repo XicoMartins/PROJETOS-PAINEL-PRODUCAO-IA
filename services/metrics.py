@@ -90,6 +90,31 @@ def format_datetime(value) -> str:
     return parsed.strftime("%d/%m/%Y %H:%M")
 
 
+def format_last_filtered_production(df: pd.DataFrame) -> str:
+    """Formata o último término de produção presente no recorte filtrado."""
+    required = {"data_producao", "hora_conclusao"}
+    if df.empty or not required.issubset(df.columns):
+        return "Horário não disponível"
+
+    dates = pd.to_datetime(df["data_producao"], errors="coerce")
+    times = pd.to_datetime(
+        df["hora_conclusao"].astype("string").str.strip(),
+        format="%H:%M",
+        errors="coerce",
+    )
+    valid = dates.notna() & times.notna()
+    if not valid.any():
+        return "Horário não disponível"
+
+    finished_at = (
+        dates[valid].dt.normalize()
+        + pd.to_timedelta(times[valid].dt.hour, unit="h")
+        + pd.to_timedelta(times[valid].dt.minute, unit="m")
+    )
+    latest = finished_at.max()
+    return latest.strftime("%d/%m/%Y às %H:%M")
+
+
 def resolve_last_update_metric(
     df: pd.DataFrame,
     filter_context: FilterContext,

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+from services import metrics
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -21,6 +22,34 @@ from services.operational_efficiency import OperationalEfficiencyResult
 
 
 class MetricsServiceTests(unittest.TestCase):
+    def test_formats_latest_production_datetime_from_filtered_rows(self) -> None:
+        df = pd.DataFrame(
+            {
+                "data_producao": ["2026-09-02", "2026-09-03", "2026-09-03"],
+                "hora_conclusao": ["18:40", "08:15", "16:27"],
+            }
+        )
+
+        formatter = getattr(metrics, "format_last_filtered_production", None)
+        self.assertTrue(callable(formatter), "formatador da última produção ausente")
+        value = formatter(df)
+
+        self.assertEqual(value, "03/09/2026 às 16:27")
+
+    def test_last_production_requires_a_valid_completion_time(self) -> None:
+        df = pd.DataFrame(
+            {
+                "data_producao": ["2026-09-03", "2026-09-03"],
+                "hora_conclusao": [None, "horário inválido"],
+            }
+        )
+
+        formatter = getattr(metrics, "format_last_filtered_production", None)
+        self.assertTrue(callable(formatter), "formatador da última produção ausente")
+        value = formatter(df)
+
+        self.assertEqual(value, "Horário não disponível")
+
     def test_resolve_last_update_metric_returns_datetime_for_processo(self) -> None:
         df = pd.DataFrame(
             {
