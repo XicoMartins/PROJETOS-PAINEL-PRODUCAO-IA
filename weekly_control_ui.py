@@ -334,5 +334,19 @@ WEEKLY_HOST_CSS = """
 .st-key-weekly_control_host [data-testid="stExpander"] summary { color: #f4f4f4 !important; }
 .st-key-weekly_control_host .weekly-control p { color: inherit; }
 .st-key-weekly_control_host .weekly-control .weekly-period { color: #51565a; }
+
+  .st-key-weekly_control_host :is(.st-key-weekly_report_generate, .st-key-weekly_report_download) button {
+    background: #082e69 !important;
+    border-color: #082e69 !important;
+    color: #fff !important;
+  }
+  .st-key-weekly_control_host :is(.st-key-weekly_report_generate, .st-key-weekly_report_download) button p {
+    color: #fff !important;
+  }
+  .st-key-weekly_control_host :is(.st-key-weekly_report_generate, .st-key-weekly_report_download) button:is(:hover, :focus, :focus-visible) {
+    background: #0879c9 !important;
+    border-color: #0879c9 !important;
+    color: #fff !important;
+  }
 </style>
 """
