@@ -325,6 +325,19 @@ CSS = """
     .footnote { padding-right: 12px; padding-left: 45px; }
     .footer-brush { display: none; }
   }
+  :is(.st-key-weekly_report_generate, .st-key-weekly_report_download) button {
+    background: #082e69 !important;
+    border-color: #082e69 !important;
+    color: #fff !important;
+  }
+  :is(.st-key-weekly_report_generate, .st-key-weekly_report_download) button p {
+    color: #fff !important;
+  }
+  :is(.st-key-weekly_report_generate, .st-key-weekly_report_download) button:is(:hover, :focus, :focus-visible) {
+    background: #0879c9 !important;
+    border-color: #0879c9 !important;
+    color: #fff !important;
+  }
 </style>
 """
 
