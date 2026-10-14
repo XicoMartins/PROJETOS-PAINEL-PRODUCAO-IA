@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timedelta
@@ -40,6 +41,7 @@ class WeeklySourceData:
     detected_component_keys: tuple[str, ...]
     updated_at: datetime | None
     warnings: tuple[str, ...]
+    source_entries: tuple[dict, ...] = ()
 
 
 def _project_label(identity: ProjectIdentity) -> str:
@@ -116,11 +118,12 @@ def load_weekly_source(
     identity: ProjectIdentity,
     previous_period: WeekPeriod,
     current_period: WeekPeriod,
+    connection=None,
 ) -> WeeklySourceData:
     if not db_url:
         raise RuntimeError("DATABASE_URL ainda não foi configurada neste aplicativo.")
     key = project_key(identity)
-    with psycopg.connect(db_url, connect_timeout=12) as connection:
+    with (nullcontext(connection) if connection is not None else psycopg.connect(db_url, connect_timeout=12)) as connection:
         with connection.cursor(row_factory=psycopg.rows.dict_row) as cursor:
             cursor.execute(
                 """
@@ -146,7 +149,7 @@ def load_weekly_source(
             requirement_rows = cursor.fetchall()
             cursor.execute(
                 """
-                SELECT processo, maquinario, quantidade, timestamp, created_at
+                SELECT *
                   FROM public.painting_entries
                  WHERE cliente = %s
                    AND display = %s
@@ -218,6 +221,7 @@ def load_weekly_source(
         detected_component_keys=detected,
         updated_at=max((entry.occurred_at for entry in entries), default=None),
         warnings=tuple(warnings),
+        source_entries=tuple(movement_rows),
     )
 
 

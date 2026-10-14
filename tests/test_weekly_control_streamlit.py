@@ -129,7 +129,7 @@ class WeeklyPanelStateTest(unittest.TestCase):
                 return_value=source,
                 create=True,
             ),
-            patch.object(streamlit_app.st, "selectbox", return_value=option.key),
+            patch.object(streamlit_app.st, "multiselect", return_value=[option.key]),
             patch.object(
                 streamlit_app,
                 "weekly_periods",
@@ -169,7 +169,7 @@ class WeeklyPanelStateTest(unittest.TestCase):
             patch.object(streamlit_app, "database_url", return_value="postgresql://database"),
             patch.object(streamlit_app, "load_weekly_projects_cached", return_value=(option,)),
             patch.object(streamlit_app, "load_weekly_source_cached", return_value=source),
-            patch.object(streamlit_app.st, "selectbox", return_value=option.key),
+            patch.object(streamlit_app.st, "multiselect", return_value=[option.key]),
             patch.object(streamlit_app, "render_target_editor"),
             patch.object(streamlit_app, "render_requirement_editor"),
             patch.object(streamlit_app.st, "markdown") as markdown,
@@ -191,7 +191,7 @@ class WeeklyPanelStateTest(unittest.TestCase):
         with (
             patch.object(streamlit_app, "database_url", return_value="postgresql://database"),
             patch.object(streamlit_app, "load_weekly_projects_cached", return_value=(option,)),
-            patch.object(streamlit_app.st, "selectbox", return_value=option.key),
+            patch.object(streamlit_app.st, "multiselect", return_value=[option.key]),
             patch.object(
                 streamlit_app,
                 "load_weekly_source_cached",

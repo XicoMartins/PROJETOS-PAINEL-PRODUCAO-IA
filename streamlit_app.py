@@ -1,4 +1,6 @@
 from __future__ import annotations
+from weekly_report import ALL_PROJECTS, select_projects
+from weekly_report_data import emit_report
 
 import html
 import math
@@ -1211,52 +1213,59 @@ def weekly_control_panel() -> None:
             return
 
         by_key = {project.key: project for project in projects}
-        selected_key = st.selectbox(
-            "Projeto analisado",
-            options=tuple(by_key),
-            format_func=lambda key: by_key[key].label,
-            key="weekly_control_project",
+        selected_keys = st.multiselect(
+            "Projetos analisados",
+            options=(ALL_PROJECTS, *by_key),
+            default=[projects[0].key],
+            format_func=lambda key: "Todos os projetos" if key == ALL_PROJECTS else by_key[key].label,
+            key="weekly_control_projects",
+            placeholder="Pesquise cliente, display, número ou código",
         )
-        selected = by_key[selected_key]
+        selected_projects = select_projects(projects, selected_keys)
         current_period, following_period = weekly_periods()
-        source = load_weekly_source_cached(
-            db_url,
-            selected.identity,
-            current_period,
-            following_period,
-        )
-        requirements = _complete_detected_requirements(source)
-        control = build_weekly_control(
-            source.previous_target,
-            source.current_target,
-            requirements,
-            source.entries,
-        )
-        warnings = list(source.warnings)
-        if not source.entries:
-            warnings.append("Nenhum movimento reconhecido para o projeto selecionado.")
-        if source.previous_target is None:
-            warnings.append("Meta acumulada da semana atual não cadastrada.")
-        if source.current_target is None:
-            warnings.append("Meta acumulada da próxima semana não cadastrada.")
-        warnings.extend(
-            f"Quantidade por conjunto ausente: {requirement.display_name}."
-            for requirement in requirements
-            if requirement.active and requirement.quantity_per_set is None
-        )
-        control = replace(control, warnings=tuple(dict.fromkeys(warnings)))
-        st.markdown(
-            render_weekly_control_html(
+        if not selected_projects:
+            st.info("Selecione um projeto ou Todos os projetos. Pesquise pelo cliente, display, número ou código.")
+            return
+        render_weekly_report_controls(db_url, selected_projects, current_period, following_period)
+        for selected in selected_projects:
+            source = load_weekly_source_cached(
+                db_url,
                 selected.identity,
                 current_period,
                 following_period,
-                control,
-                source.updated_at,
-            ),
-            unsafe_allow_html=True,
-        )
-        render_target_editor(db_url, selected.identity, following_period, source)
-        render_requirement_editor(db_url, selected.identity, requirements)
+            )
+            requirements = _complete_detected_requirements(source)
+            control = build_weekly_control(
+                source.previous_target,
+                source.current_target,
+                requirements,
+                source.entries,
+            )
+            warnings = list(source.warnings)
+            if not source.entries:
+                warnings.append("Nenhum movimento reconhecido para o projeto selecionado.")
+            if source.previous_target is None:
+                warnings.append("Meta acumulada da semana atual não cadastrada.")
+            if source.current_target is None:
+                warnings.append("Meta acumulada da próxima semana não cadastrada.")
+            warnings.extend(
+                f"Quantidade por conjunto ausente: {requirement.display_name}."
+                for requirement in requirements
+                if requirement.active and requirement.quantity_per_set is None
+            )
+            control = replace(control, warnings=tuple(dict.fromkeys(warnings)))
+            st.markdown(
+                render_weekly_control_html(
+                    selected.identity,
+                    current_period,
+                    following_period,
+                    control,
+                    source.updated_at,
+                ),
+                unsafe_allow_html=True,
+            )
+            render_target_editor(db_url, selected.identity, following_period, source)
+            render_requirement_editor(db_url, selected.identity, requirements)
     except ProjectIdentityConflictError:
         st.markdown(
             render_weekly_empty_html(
@@ -1281,6 +1290,25 @@ def weekly_control_panel() -> None:
             ),
             unsafe_allow_html=True,
         )
+
+
+def render_weekly_report_controls(db_url, projects, previous_period, current_period):
+    selection=tuple(sorted(project.key for project in projects))
+    st.caption("A emissão é registrada ao gerar o PDF. A primeira emissão é geral; as próximas incluem os itens alterados com seus totais acumulados. Baixar novamente reutiliza o arquivo gerado.")
+    if projects and st.button("Gerar relatório PDF", key="weekly_report_generate"):
+        try:
+            pdf=emit_report(db_url,tuple(project.identity for project in projects),previous_period,current_period)
+            if pdf is None:
+                st.info("Sem alterações desde o último relatório")
+            else:
+                st.session_state["weekly_report_artifact"]={"selection":selection,"data":pdf}
+        except psycopg.errors.UndefinedTable:
+            st.error("Estrutura de relatórios ainda não configurada. Aplique a migração de relatórios.")
+        except Exception:
+            st.error("Não foi possível gerar o relatório. Tente novamente; a referência anterior foi preservada.")
+    artifact=st.session_state.get("weekly_report_artifact")
+    if artifact and artifact["selection"] == selection:
+        st.download_button("Baixar PDF",data=artifact["data"],file_name="relatorio_semanal_pintura.pdf",mime="application/pdf",key="weekly_report_download")
 
 
 def _complete_detected_requirements(
@@ -1320,12 +1348,14 @@ def render_target_editor(db_url, identity, current_period, source) -> None:
                 "Semana da meta",
                 value=current_period.end,
                 format="DD/MM/YYYY",
+                key=f"weekly_target_day_{project_key(identity)}",
             )
             target_sets = st.number_input(
                 "Meta acumulada em conjuntos",
                 min_value=0,
                 step=1,
                 value=int(source.current_target or 0),
+                key=f"weekly_target_value_{project_key(identity)}",
             )
             confirmed = st.checkbox(
                 "Confirmo a gravação desta meta acumulada",

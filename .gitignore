@@ -48,3 +48,5 @@ next-env.d.ts
 /Controle PINTURA Anisio 2026.xlsx
 /.tmp-ppt-reference/
 /.cache/
+
+/supabase/.temp/
