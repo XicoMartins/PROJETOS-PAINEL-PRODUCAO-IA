@@ -48,7 +48,13 @@ def changes(current, previous):
     result=[]
     for key in dict.fromkeys([*current['rows'],*old]):
         now=current['rows'].get(key); before=old.get(key)
-        if previous and now==before and current['targets']==previous['targets']: continue
+        target_changed = (
+            previous is not None
+            and current['targets'] != previous['targets']
+            and (now or before)['kind'] == 'component'
+        )
+        if previous is not None and now == before and not target_changed:
+            continue
         deltas={}
         for field in ('total_remessa','total_retorno','painting_balance'):
             a=before.get(field) if before else '0'; b=now.get(field) if now else '0'

@@ -73,8 +73,12 @@ def build_pdf(reports,generated_at):
         for item in report['rows']:
             row=item['current'] or item['previous']; name=row['display_name']+(' (REMOVIDO)' if item['removed'] else '')
             chunks=[name[i:i+240] for i in range(0,len(name),240)] or ['']
+            # A source key may be as long as the name; bound the repeated prefix.
+            identifier = row['component_key']
+            if len(identifier) > 48:
+                identifier = identifier[:45] + '...'
             for chunk_index,chunk in enumerate(chunks):
-                label=chunk if chunk_index==0 else row['component_key']+' (continuação)\n'+chunk
+                label=chunk if chunk_index==0 else identifier+' (continuação)\n'+chunk
                 values={field:('0' if item['removed'] else row[field]) for field in ('total_remessa','total_retorno','painting_balance','return_remittance_balance','previous_balance','current_balance')}
                 send,bg_send=status(values['return_remittance_balance']);ret,bg_ret=status(values['previous_balance']);current,bg_current=status(values['current_balance'])
                 n=len(data)

@@ -70,3 +70,21 @@ class PDFTest(unittest.TestCase):
         report['rows']=rows*90
         reader=PdfReader(BytesIO(build_pdf([report],NOW))); self.assertGreater(len(reader.pages),1)
         self.assertTrue(all('Página' in page.extract_text() for page in reader.pages))
+
+    def test_long_component_key_and_display_name_generate_paginated_pdf(self):
+        from dataclasses import replace
+        from decimal import Decimal
+        from weekly_control import ComponentRequirement, MovementEntry
+        from weekly_report_pdf import build_pdf
+        long='COMPONENTE ' * 180
+        for key,name in ((long,long),('CHAVE CURTA',long),(long,'NOME CURTO')):
+            with self.subTest(key_length=len(key),name_length=len(name)):
+                base=replace(source(),requirements=(ComponentRequirement(key,name,Decimal(1),0,True),),entries=(MovementEntry(key,'remessa',Decimal(152),NOW),),detected_component_keys=())
+                current=snapshot(ID,base)
+                data=build_pdf([{'snapshot':current,'previous_at':None,'rows':changes(current,None)}],NOW)
+                reader=PdfReader(BytesIO(data))
+                self.assertTrue(data.startswith(b'%PDF-'))
+                self.assertTrue(all('Página' in page.extract_text() for page in reader.pages))
+                if len(name)>240:
+                    self.assertGreater(len(reader.pages),1)
+                    self.assertIn('(continuação)', ''.join(page.extract_text() for page in reader.pages))

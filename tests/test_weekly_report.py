@@ -48,6 +48,15 @@ class ReportTest(unittest.TestCase):
         snapshot,changes=self.api()
         edited=replace(source(),requirements=(ComponentRequirement('CORPO','CORPO',D(1),4,True),))
         self.assertEqual(len(changes(snapshot(ID,edited),snapshot(ID,source()))),1)
+    def test_target_only_update_excludes_unchanged_paint(self):
+        snapshot,changes=self.api()
+        base=replace(source(),entries=source().entries+(MovementEntry('TINTA AZUL','remessa',D(20),NOW),))
+        old=snapshot(ID,base)
+        current=snapshot(ID,replace(base,current_target=170))
+        changed=changes(current,old)
+        self.assertEqual([row['key'] for row in changed],['component:CORPO'])
+        self.assertEqual(current['targets'],[150,170])
+        self.assertEqual(current['rows']['paint:TINTA AZUL'],old['rows']['paint:TINTA AZUL'])
     def test_decimal_normalization_and_project_scope(self):
         snapshot,changes=self.api()
         self.assertEqual(changes(snapshot(ID,source('152.000')),snapshot(ID,source())),[])
