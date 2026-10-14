@@ -161,3 +161,24 @@ Upstream template (vinext-starter)
 Este repositório tem origem em um template chamado vinext-starter. Parte do
 conteudo do README original foi mantido no repositório remoto; consulte:
 https://github.com/cloudflare/vinext
+
+
+### Controle semanal pintura e relatório PDF
+
+Após entrar, selecione **Controle semanal pintura** no menu lateral, logo após
+**Remessas pintura**. Escolha um ou vários projetos (busca por cliente, display,
+número e código) ou **Todos os projetos**. Esta tela consulta `painting_entries`
+diretamente usando as mesmas configurações de conexão do painel.
+
+Clique em **Gerar relatório PDF**: a primeira emissão de cada projeto é geral.
+As emissões seguintes incluem as linhas alteradas com seus **totais acumulados
+ATUAIS**, não apenas a diferença desde a emissão anterior. A reconciliação
+explica o acumulado anterior + atualização = acumulado atual. A geração avança
+o histórico operacional compartilhado por projeto, independentemente do usuário;
+sem alterações, nenhuma nova emissão é registrada. **Baixar PDF** reutiliza os
+mesmos bytes já gerados e não avança esse histórico.
+
+As estruturas reproduzíveis estão em `supabase/migrations/`: metas/requisitos
+(`20260825_create_painting_weekly_control.sql`) e referências das emissões
+(`20261014142330_painting_report_checkpoints.sql`). O banco deve conter essas
+estruturas antes de usar a tela; esta integração não executa migrations.

@@ -8,6 +8,7 @@ from html import escape
 
 import streamlit as st
 
+from weekly_control_ui import render_weekly_control
 from branding import apply_branding
 from data_loader import load_data, load_painting_data
 from filters import FilterContext, apply_filters
@@ -126,6 +127,7 @@ def build_navigation_tabs(*, is_admin: bool) -> list[str]:
         "Integridade",
         "Painel TV",
         "Remessas pintura",
+        "Controle semanal pintura",
         "Painel de Produção",
     ]
     if is_admin:
@@ -277,6 +279,10 @@ def main() -> None:
         )
 
     _render_dashboard_title()
+
+    if selected_tab == "Controle semanal pintura":
+        render_weekly_control()
+        return
 
     if selected_tab == "Geral":
         selected_label = _render_data_source_picker(data_sources)
