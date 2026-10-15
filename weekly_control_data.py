@@ -225,7 +225,7 @@ def load_weekly_source(
         warnings=tuple(warnings),
         source_entries=tuple(movement_rows),
         last_entry_at=max((instant for row in movement_rows
-                           if (instant := _as_datetime(row.get('updated_at') or row.get('created_at') or row.get('timestamp'))) is not None), default=None),
+                           if (instant := _as_datetime(row.get('timestamp') or row.get('created_at'))) is not None), default=None),
     )
 
 

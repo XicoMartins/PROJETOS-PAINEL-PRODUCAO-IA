@@ -178,7 +178,7 @@ class WeeklySourceRepositoryTest(unittest.TestCase):
         connection=SequencedFakeConnection([[target],[requirement],[movement]])
         result=load_weekly_source('db',identity,previous,current,connection=connection)
         self.assertEqual(result.updated_at,recent)
-        self.assertEqual(result.last_entry_at,recent)
+        self.assertEqual(result.last_entry_at,recent+timedelta(days=30))
         self.assertIn('updated_at',connection.cursor_instance.executions[0][0])
         self.assertIn('updated_at',connection.cursor_instance.executions[1][0])
 
@@ -189,14 +189,14 @@ class WeeklySourceRepositoryTest(unittest.TestCase):
         now=datetime(2026,10,15,15,tzinfo=SAO_PAULO)
         previous,current=weekly_periods(now)
         rows=[
-            {'processo':'UNKNOWN','timestamp':now+timedelta(days=5),'created_at':now-timedelta(days=2),'updated_at':now-timedelta(days=1)},
-            {'processo':'UNKNOWN','timestamp':now-timedelta(days=3),'created_at':now},
-            {'processo':'UNKNOWN','timestamp':now-timedelta(hours=1)},
+            {'processo':'UNKNOWN','timestamp':now-timedelta(days=2),'created_at':now-timedelta(days=1),'updated_at':now+timedelta(days=3)},
+            {'processo':'UNKNOWN','timestamp':now,'created_at':now-timedelta(days=3)},
+            {'processo':'UNKNOWN','created_at':now-timedelta(hours=1)},
         ]
         connection=SequencedFakeConnection([[{'week_start':current.start,'target_sets':10,'updated_at':now+timedelta(days=2)}],[],rows])
         result=load_weekly_source('db',ProjectIdentity('FEMSA','DISPLAY','1','VM'),previous,current,connection=connection)
         self.assertEqual(result.last_entry_at,now)
-        self.assertEqual(result.updated_at,now+timedelta(days=2))
+        self.assertEqual(result.updated_at,now+timedelta(days=3))
         self.assertEqual(result.entries,())
 
     def test_loads_targets_requirements_and_only_the_selected_project_movements(self):
