@@ -1306,11 +1306,12 @@ def weekly_control_panel() -> None:
 
 
 def render_weekly_report_controls(db_url, projects, previous_period, current_period):
-    selection=tuple(sorted(project.key for project in projects))
-    st.caption("A emissão é registrada ao gerar o PDF. A primeira emissão é geral; as próximas incluem os itens alterados com seus totais acumulados. Baixar novamente reutiliza o arquivo gerado.")
+    order_by=st.selectbox('Ordenar páginas do PDF',options=('latest_update','selection'),format_func=lambda value: 'Última atualização' if value=='latest_update' else 'Ordem de seleção',key='weekly_report_order')
+    selection=(tuple(project.key for project in projects),order_by)
+    st.caption("A primeira emissão é geral; as próximas incluem os itens alterados com seus totais acumulados. Projetos sem alterações aparecem com a data da última atualização. A referência anterior só avança para projetos alterados.")
     if projects and st.button("Gerar relatório PDF", key="weekly_report_generate"):
         try:
-            pdf=emit_report(db_url,tuple(project.identity for project in projects),previous_period,current_period)
+            pdf=emit_report(db_url,tuple(project.identity for project in projects),previous_period,current_period,order_by=order_by)
             if pdf is None:
                 st.info("Sem alterações desde o último relatório")
             else:
