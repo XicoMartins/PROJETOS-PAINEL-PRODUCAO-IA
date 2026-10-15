@@ -146,6 +146,23 @@ class WeeklyProjectRepositoryTest(unittest.TestCase):
 
 
 class WeeklySourceRepositoryTest(unittest.TestCase):
+    def test_older_target_edit_sets_update_time_without_becoming_current_target(self):
+        from weekly_control import ProjectIdentity, weekly_periods, SAO_PAULO
+        from weekly_control_data import load_weekly_source
+        from datetime import timedelta
+        now=datetime(2026,10,15,15,tzinfo=SAO_PAULO)
+        previous,current=weekly_periods(now)
+        older=previous.start-timedelta(days=7)
+        target={'week_start':older,'target_sets':99,'updated_at':now}
+        connection=SequencedFakeConnection([[target],[],[]])
+        result=load_weekly_source('db',ProjectIdentity('FEMSA','DISPLAY','1','VM'),previous,current,connection=connection)
+        self.assertIsNone(result.previous_target)
+        self.assertIsNone(result.current_target)
+        self.assertEqual(result.updated_at,now)
+        target_sql,target_params=connection.cursor_instance.executions[0]
+        self.assertNotIn('week_start IN',target_sql)
+        self.assertEqual(len(target_params),1)
+
     def test_source_update_includes_configuration_and_entry_edit_times(self):
         from weekly_control import ProjectIdentity, weekly_periods, SAO_PAULO
         from weekly_control_data import load_weekly_source

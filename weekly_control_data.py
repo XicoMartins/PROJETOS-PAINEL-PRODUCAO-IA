@@ -130,10 +130,9 @@ def load_weekly_source(
                 SELECT week_start, target_sets, updated_at
                   FROM public.painting_weekly_targets
                  WHERE project_key = %s
-                   AND week_start IN (%s, %s)
               ORDER BY week_start
                 """,
-                (key, previous_period.start, current_period.start),
+                (key,),
             )
             target_rows = cursor.fetchall()
             cursor.execute(
@@ -166,7 +165,8 @@ def load_weekly_source(
             )
             movement_rows = cursor.fetchall()
 
-    targets = {row["week_start"]: int(row["target_sets"]) for row in target_rows}
+    selected_weeks={previous_period.start,current_period.start}
+    targets = {row["week_start"]: int(row["target_sets"]) for row in target_rows if row["week_start"] in selected_weeks}
     requirements = tuple(
         ComponentRequirement(
             source_component_key=component_key(row["source_component_key"]),
