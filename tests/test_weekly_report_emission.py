@@ -27,8 +27,10 @@ class EmissionTest(unittest.TestCase):
         return emit_report
     def test_no_changes_does_not_generate_or_save(self):
         emit=self.api(); snap=snapshot(ID,source()); cur=Cursor({snap['project_key']:{'snapshot':snap,'generated_at':NOW}}); connection=Connection(cur)
-        with patch('weekly_report_data.psycopg.connect',return_value=connection),patch('weekly_report_data.load_weekly_source',return_value=source()),patch('weekly_report_data.build_pdf') as pdf:
-            self.assertIsNone(emit('db',(ID,),*weekly_periods(NOW))); pdf.assert_not_called()
+        with patch('weekly_report_data.psycopg.connect',return_value=connection),patch('weekly_report_data.load_weekly_source',return_value=source()),patch('weekly_report_data.build_pdf',return_value=b'%PDF-exact') as pdf:
+            self.assertEqual(emit('db',(ID,),*weekly_periods(NOW)),b'%PDF-exact')
+            self.assertEqual(pdf.call_args.args[0][0]['status'],'unchanged')
+            self.assertEqual(pdf.call_args.args[0][0]['rows'][0]['current']['total_remessa'],'152')
         self.assertFalse(any('INSERT INTO' in sql for sql,_ in cur.calls))
     def test_generation_and_save_failure_rollback(self):
         emit=self.api()
@@ -54,10 +56,42 @@ class EmissionTest(unittest.TestCase):
         emit=self.api(); other=replace(ID,numero_display='2'); snap=snapshot(ID,source()); cur=Cursor({snap['project_key']:{'snapshot':snap,'generated_at':NOW}})
         with patch('weekly_report_data.psycopg.connect',return_value=Connection(cur)),patch('weekly_report_data.load_weekly_source',return_value=source()),patch('weekly_report_data.build_pdf',return_value=b'%PDF-exact') as pdf:
             emit('db',(ID,other),*weekly_periods(NOW))
-        self.assertEqual(len(pdf.call_args.args[0]),1)
+        self.assertEqual(len(pdf.call_args.args[0]),2)
         saved=[args[0] for sql,args in cur.calls if 'INSERT INTO' in sql]
         self.assertEqual(saved,[project_key(other)])
+    def test_selection_order_and_latest_source_update_order(self):
+        from dataclasses import replace
+        from datetime import timedelta
+        emit=self.api(); older=replace(ID,numero_display='2'); newer=replace(ID,numero_display='3')
+        def load(db_url,identity,*args,**kwargs):
+            return replace(source(),updated_at=NOW-timedelta(days=1) if identity==older else NOW)
+        for order,expected in (('selection',[older,newer]),('latest_update',[newer,older])):
+            with self.subTest(order=order):
+                cur=Cursor()
+                with patch('weekly_report_data.psycopg.connect',return_value=Connection(cur)),patch('weekly_report_data.load_weekly_source',side_effect=load),patch('weekly_report_data.build_pdf',return_value=b'%PDF-exact') as pdf:
+                    emit('db',(older,newer),*weekly_periods(NOW),order_by=order)
+                self.assertEqual([report['snapshot']['project_key'] for report in pdf.call_args.args[0]],[snapshot(identity,source())['project_key'] for identity in expected])
+                self.assertEqual([args[0] for sql,args in cur.calls if 'pg_advisory' in sql],sorted([args[0] for sql,args in cur.calls if 'pg_advisory' in sql]))
 class PDFTest(unittest.TestCase):
+    def test_unchanged_project_has_timestamp_and_no_reconciliation(self):
+        from weekly_report_pdf import build_pdf
+        snap=snapshot(ID,source())
+        report={'snapshot':snap,'previous_at':NOW,'rows':changes(snap,None),'status':'unchanged','source_updated_at':NOW}
+        text=''.join(page.extract_text() for page in PdfReader(BytesIO(build_pdf([report],NOW))).pages)
+        self.assertIn('SEM ALTERAÇÕES',text)
+        self.assertIn('Última atualização dos dados: 14/10/2026 12:00',text)
+        self.assertIn('152',text)
+        self.assertIn('124',text)
+        self.assertIn('TOTAL DO PROJETO',text)
+        self.assertNotIn('RECONCILIAÇÃO',text)
+    def test_selected_project_order_is_pdf_page_order(self):
+        from dataclasses import replace
+        from weekly_report_pdf import build_pdf
+        other=replace(ID,display='SECOND DISPLAY')
+        reports=[{'snapshot':snapshot(identity,source()),'previous_at':NOW,'rows':changes(snapshot(identity,source()),None),'status':'unchanged','source_updated_at':NOW} for identity in (other,ID)]
+        pages=PdfReader(BytesIO(build_pdf(reports,NOW))).pages
+        self.assertIn('SECOND DISPLAY',pages[0].extract_text())
+        self.assertIn(ID.display,pages[1].extract_text())
     def test_binary_pdf_paginated_and_reconciliation_extractable(self):
         try: from weekly_report_pdf import build_pdf
         except ImportError: self.fail('PDF generator missing')

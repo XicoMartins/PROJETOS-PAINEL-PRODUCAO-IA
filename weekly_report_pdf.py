@@ -52,10 +52,14 @@ def build_pdf(reports,generated_at):
     story=[]
     for index,report in enumerate(reports):
         if index: story.append(PageBreak())
-        snap=report['snapshot']; identity=snap['identity']; general=report['previous_at'] is None
-        hero=Table([[p('CONTROLE SEMANAL DE REMESSAS E RETORNOS\n'+('RELATÓRIO GERAL' if general else 'RELATÓRIO DE ATUALIZAÇÃO'),TITLE),p(f'{identity["display"]} · Pintura externa\n{identity["cliente"]} · Nº {identity["numero_display"]} · {identity["codigo_pintura"]}',WHITE)]],colWidths=[width*.59,width*.41])
+        snap=report['snapshot']; identity=snap['identity']; general=report['previous_at'] is None; unchanged=report.get('status')=='unchanged'
+        heading='SEM ALTERAÇÕES' if unchanged else ('RELATÓRIO GERAL' if general else 'RELATÓRIO DE ATUALIZAÇÃO')
+        hero=Table([[p('CONTROLE SEMANAL DE REMESSAS E RETORNOS\n'+heading,TITLE),p(f'{identity["display"]} · Pintura externa\n{identity["cliente"]} · Nº {identity["numero_display"]} · {identity["codigo_pintura"]}',WHITE)]],colWidths=[width*.59,width*.41])
         hero.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),GRAPHITE),('LINEABOVE',(0,0),(-1,0),3,colors.HexColor('#bd1622')),('TOPPADDING',(0,0),(-1,-1),12),('BOTTOMPADDING',(0,0),(-1,-1),12),('VALIGN',(0,0),(-1,-1),'TOP')]))
         story.extend([hero,Spacer(1,6),p(f'Emissão: {instant(generated_at)} (America/Sao_Paulo) | Relatório anterior: {instant(report["previous_at"])}'),Spacer(1,8)])
+        if unchanged:
+            updated=report.get('source_updated_at')
+            story.extend([p('Nenhuma alteração desde o último relatório.',BOLD),Spacer(1,10),p('Última atualização dos dados: '+(instant(updated) if updated else 'não disponível'))])
         heads=[]
         periods=report.get('periods') or weekly_periods(generated_at)
         for side,(label,brand,color) in enumerate((('RETORNO','multipint',WINE),('REMESSA','mtech',TEAL))):
@@ -86,9 +90,10 @@ def build_pdf(reports,generated_at):
                 for column,color in ((0,SOFT),(8,SOFT),(2,colors.HexColor('#fff0a8')),(10,colors.HexColor('#fff0a8')),(4,colors.HexColor('#dcecf8')),(12,colors.HexColor('#dcecf8')),(5,bg_send),(6,bg_ret),(13,bg_current)):
                     commands.append(('BACKGROUND',(column,n),(column,n),color))
         table=Table(data,colWidths=widths,repeatRows=2,splitByRow=1,splitInRow=0);table.setStyle(TableStyle(commands));story.append(table)
-        story.extend([Spacer(1,8),p('TOTAL DO PROJETO - resumos da base completa, incluindo itens fora desta atualização.',BOLD)])
+        total_caption='TOTAL DO PROJETO - valores atuais acumulados da base completa.' if unchanged else 'TOTAL DO PROJETO - resumos da base completa, incluindo itens fora desta atualização.'
+        story.extend([Spacer(1,8),p(total_caption,BOLD)])
         summaries=Table([[summary(snap,0,half),'',summary(snap,1,half)]],colWidths=[half,gap,half]);summaries.setStyle(TableStyle([('LEFTPADDING',(0,0),(-1,-1),0),('RIGHTPADDING',(0,0),(-1,-1),0)]));story.append(summaries)
-        if not general:
+        if not general and not unchanged:
             story.extend([Spacer(1,10),p('RECONCILIAÇÃO DOS ITENS ALTERADOS',BOLD)])
             reconciled=[[p('COMPONENTE',WHITE),p('ANTERIOR + ATUALIZAÇÃO = ACUMULADO ATUAL',WHITE)]]
             for row in report['rows']:

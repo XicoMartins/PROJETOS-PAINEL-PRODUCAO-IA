@@ -146,6 +146,23 @@ class WeeklyProjectRepositoryTest(unittest.TestCase):
 
 
 class WeeklySourceRepositoryTest(unittest.TestCase):
+    def test_source_update_includes_configuration_and_entry_edit_times(self):
+        from weekly_control import ProjectIdentity, weekly_periods, SAO_PAULO
+        from weekly_control_data import load_weekly_source
+        from datetime import timedelta
+        recent=datetime(2026,10,15,15,tzinfo=SAO_PAULO)
+        old=recent-timedelta(days=10)
+        identity=ProjectIdentity('FEMSA','DISPLAY','1','VM')
+        previous,current=weekly_periods(recent)
+        target={'week_start':previous.start,'target_sets':150,'updated_at':recent-timedelta(days=2)}
+        requirement={'source_component_key':'CORPO','display_name':'CORPO','quantity_per_set':Decimal(1),'display_order':0,'active':True,'updated_at':recent-timedelta(days=1)}
+        movement={'processo':'CORPO ENVIO','maquinario':'Envio à Pintura','quantidade':10,'timestamp':recent+timedelta(days=30),'created_at':recent}
+        connection=SequencedFakeConnection([[target],[requirement],[movement]])
+        result=load_weekly_source('db',identity,previous,current,connection=connection)
+        self.assertEqual(result.updated_at,recent)
+        self.assertIn('updated_at',connection.cursor_instance.executions[0][0])
+        self.assertIn('updated_at',connection.cursor_instance.executions[1][0])
+
     def test_loads_targets_requirements_and_only_the_selected_project_movements(self):
         from weekly_control import ProjectIdentity, WeekPeriod
         from weekly_control_data import load_weekly_source

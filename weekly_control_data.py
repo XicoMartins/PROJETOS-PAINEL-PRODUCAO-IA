@@ -127,7 +127,7 @@ def load_weekly_source(
         with connection.cursor(row_factory=psycopg.rows.dict_row) as cursor:
             cursor.execute(
                 """
-                SELECT week_start, target_sets
+                SELECT week_start, target_sets, updated_at
                   FROM public.painting_weekly_targets
                  WHERE project_key = %s
                    AND week_start IN (%s, %s)
@@ -139,7 +139,7 @@ def load_weekly_source(
             cursor.execute(
                 """
                 SELECT source_component_key, display_name, quantity_per_set,
-                       display_order, active
+                       display_order, active, updated_at
                   FROM public.painting_component_requirements
                  WHERE project_key = %s
               ORDER BY display_order, source_component_key
@@ -219,7 +219,8 @@ def load_weekly_source(
         requirements=requirements,
         entries=tuple(entries),
         detected_component_keys=detected,
-        updated_at=max((entry.occurred_at for entry in entries), default=None),
+        updated_at=max((instant for row in (*target_rows,*requirement_rows,*movement_rows)
+                        if (instant := _as_datetime(row.get('updated_at') or row.get('created_at') or row.get('timestamp'))) is not None), default=None),
         warnings=tuple(warnings),
         source_entries=tuple(movement_rows),
     )

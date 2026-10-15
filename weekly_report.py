@@ -64,5 +64,7 @@ def changes(current, previous):
 
 ALL_PROJECTS='__all__'
 def select_projects(projects, selected):
-    keys=set(selected)
-    return tuple(project for project in projects if ALL_PROJECTS in keys or project.key in keys)
+    by_key={project.key:project for project in projects}
+    if ALL_PROJECTS in selected:
+        return tuple(projects)
+    return tuple(by_key[key] for key in dict.fromkeys(selected) if key in by_key)
