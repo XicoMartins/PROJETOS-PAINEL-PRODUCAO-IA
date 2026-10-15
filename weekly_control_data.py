@@ -42,6 +42,7 @@ class WeeklySourceData:
     updated_at: datetime | None
     warnings: tuple[str, ...]
     source_entries: tuple[dict, ...] = ()
+    last_entry_at: datetime | None = None
 
 
 def _project_label(identity: ProjectIdentity) -> str:
@@ -223,6 +224,8 @@ def load_weekly_source(
                         if (instant := _as_datetime(row.get('updated_at') or row.get('created_at') or row.get('timestamp'))) is not None), default=None),
         warnings=tuple(warnings),
         source_entries=tuple(movement_rows),
+        last_entry_at=max((instant for row in movement_rows
+                           if (instant := _as_datetime(row.get('updated_at') or row.get('created_at') or row.get('timestamp'))) is not None), default=None),
     )
 
 

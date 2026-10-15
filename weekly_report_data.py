@@ -28,7 +28,7 @@ def emit_report(db_url, identities, previous_period, current_period, order_by='l
                 unchanged=bool(previous and not rows)
                 # Show current accumulated values without treating them as changes.
                 display_rows=changes(current,None) if unchanged else rows
-                reports.append({'snapshot':current,'previous_at':previous['generated_at'] if previous else None,'rows':display_rows,'periods':(previous_period,current_period),'status':'unchanged' if unchanged else 'changed','source_updated_at':source.updated_at})
+                reports.append({'snapshot':current,'previous_at':previous['generated_at'] if previous else None,'rows':display_rows,'periods':(previous_period,current_period),'status':'unchanged' if unchanged else 'changed','source_updated_at':source.updated_at,'last_entry_at':source.last_entry_at})
             if order_by == 'latest_update':
                 # Stable order for equal or missing dates, with missing dates last.
                 reports.sort(key=lambda report: (report['source_updated_at'] is None, -(report['source_updated_at'].timestamp()) if report['source_updated_at'] else 0))

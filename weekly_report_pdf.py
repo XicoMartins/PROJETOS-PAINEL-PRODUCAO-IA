@@ -56,7 +56,8 @@ def build_pdf(reports,generated_at):
         heading='SEM ALTERAÇÕES' if unchanged else ('RELATÓRIO GERAL' if general else 'RELATÓRIO DE ATUALIZAÇÃO')
         hero=Table([[p('CONTROLE SEMANAL DE REMESSAS E RETORNOS\n'+heading,TITLE),p(f'{identity["display"]} · Pintura externa\n{identity["cliente"]} · Nº {identity["numero_display"]} · {identity["codigo_pintura"]}',WHITE)]],colWidths=[width*.59,width*.41])
         hero.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),GRAPHITE),('LINEABOVE',(0,0),(-1,0),3,colors.HexColor('#bd1622')),('TOPPADDING',(0,0),(-1,-1),12),('BOTTOMPADDING',(0,0),(-1,-1),12),('VALIGN',(0,0),(-1,-1),'TOP')]))
-        story.extend([hero,Spacer(1,6),p(f'Emissão: {instant(generated_at)} (America/Sao_Paulo) | Relatório anterior: {instant(report["previous_at"])}'),Spacer(1,8)])
+        last_entry=report.get('last_entry_at')
+        story.extend([hero,Spacer(1,6),p(f'Emissão: {instant(generated_at)} (America/Sao_Paulo) | Relatório anterior: {instant(report["previous_at"])}'),p('Último lançamento: '+(instant(last_entry) if last_entry else 'não disponível')),Spacer(1,8)])
         if unchanged:
             updated=report.get('source_updated_at')
             story.extend([p('Nenhuma alteração desde o último relatório.',BOLD),Spacer(1,10),p('Última atualização dos dados: '+(instant(updated) if updated else 'não disponível'))])

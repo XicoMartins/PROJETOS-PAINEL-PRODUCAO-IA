@@ -159,6 +159,7 @@ class WeeklySourceRepositoryTest(unittest.TestCase):
         self.assertIsNone(result.previous_target)
         self.assertIsNone(result.current_target)
         self.assertEqual(result.updated_at,now)
+        self.assertIsNone(result.last_entry_at)
         target_sql,target_params=connection.cursor_instance.executions[0]
         self.assertNotIn('week_start IN',target_sql)
         self.assertEqual(len(target_params),1)
@@ -177,8 +178,26 @@ class WeeklySourceRepositoryTest(unittest.TestCase):
         connection=SequencedFakeConnection([[target],[requirement],[movement]])
         result=load_weekly_source('db',identity,previous,current,connection=connection)
         self.assertEqual(result.updated_at,recent)
+        self.assertEqual(result.last_entry_at,recent)
         self.assertIn('updated_at',connection.cursor_instance.executions[0][0])
         self.assertIn('updated_at',connection.cursor_instance.executions[1][0])
+
+    def test_last_entry_uses_raw_project_rows_and_timestamp_fallbacks(self):
+        from weekly_control import ProjectIdentity, weekly_periods, SAO_PAULO
+        from weekly_control_data import load_weekly_source
+        from datetime import timedelta
+        now=datetime(2026,10,15,15,tzinfo=SAO_PAULO)
+        previous,current=weekly_periods(now)
+        rows=[
+            {'processo':'UNKNOWN','timestamp':now+timedelta(days=5),'created_at':now-timedelta(days=2),'updated_at':now-timedelta(days=1)},
+            {'processo':'UNKNOWN','timestamp':now-timedelta(days=3),'created_at':now},
+            {'processo':'UNKNOWN','timestamp':now-timedelta(hours=1)},
+        ]
+        connection=SequencedFakeConnection([[{'week_start':current.start,'target_sets':10,'updated_at':now+timedelta(days=2)}],[],rows])
+        result=load_weekly_source('db',ProjectIdentity('FEMSA','DISPLAY','1','VM'),previous,current,connection=connection)
+        self.assertEqual(result.last_entry_at,now)
+        self.assertEqual(result.updated_at,now+timedelta(days=2))
+        self.assertEqual(result.entries,())
 
     def test_loads_targets_requirements_and_only_the_selected_project_movements(self):
         from weekly_control import ProjectIdentity, WeekPeriod
