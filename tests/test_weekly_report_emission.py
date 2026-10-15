@@ -31,7 +31,15 @@ class EmissionTest(unittest.TestCase):
             self.assertEqual(emit('db',(ID,),*weekly_periods(NOW)),b'%PDF-exact')
             self.assertEqual(pdf.call_args.args[0][0]['status'],'unchanged')
             self.assertEqual(pdf.call_args.args[0][0]['rows'][0]['current']['total_remessa'],'152')
+            self.assertIsNone(pdf.call_args.args[0][0]['last_entry_at'])
         self.assertFalse(any('INSERT INTO' in sql for sql,_ in cur.calls))
+    def test_emission_passes_project_last_entry_to_pdf(self):
+        from dataclasses import replace
+        from datetime import timedelta
+        emit=self.api(); last_entry=NOW-timedelta(days=1)
+        with patch('weekly_report_data.psycopg.connect',return_value=Connection(Cursor())),patch('weekly_report_data.load_weekly_source',return_value=replace(source(),last_entry_at=last_entry)),patch('weekly_report_data.build_pdf',return_value=b'%PDF-exact') as pdf:
+            emit('db',(ID,),*weekly_periods(NOW))
+        self.assertEqual(pdf.call_args.args[0][0]['last_entry_at'],last_entry)
     def test_generation_and_save_failure_rollback(self):
         emit=self.api()
         for fail_save in (False,True):
@@ -73,6 +81,20 @@ class EmissionTest(unittest.TestCase):
                 self.assertEqual([report['snapshot']['project_key'] for report in pdf.call_args.args[0]],[snapshot(identity,source())['project_key'] for identity in expected])
                 self.assertEqual([args[0] for sql,args in cur.calls if 'pg_advisory' in sql],sorted([args[0] for sql,args in cur.calls if 'pg_advisory' in sql]))
 class PDFTest(unittest.TestCase):
+    def test_every_report_status_shows_generated_and_last_entry_times(self):
+        from datetime import timedelta
+        from weekly_report_pdf import build_pdf
+        snap=snapshot(ID,source())
+        last_entry=NOW-timedelta(days=2)
+        for previous_at,status in ((None,'changed'),(NOW,'changed'),(NOW,'unchanged')):
+            with self.subTest(previous_at=previous_at,status=status):
+                report={'snapshot':snap,'previous_at':previous_at,'rows':changes(snap,None),'status':status,'last_entry_at':last_entry}
+                text=''.join(page.extract_text() for page in PdfReader(BytesIO(build_pdf([report],NOW))).pages)
+                self.assertIn('Emissão: 14/10/2026 12:00',text)
+                self.assertIn('Último lançamento: 12/10/2026 12:00',text)
+        report['last_entry_at']=None
+        text=''.join(page.extract_text() for page in PdfReader(BytesIO(build_pdf([report],NOW))).pages)
+        self.assertIn('Último lançamento: não disponível',text)
     def test_unchanged_project_has_timestamp_and_no_reconciliation(self):
         from weekly_report_pdf import build_pdf
         snap=snapshot(ID,source())
