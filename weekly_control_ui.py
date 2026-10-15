@@ -135,21 +135,31 @@ def weekly_control_panel() -> None:
 
 
 def render_weekly_report_controls(db_url, projects, previous_period, current_period):
-    selection=tuple(sorted(project.key for project in projects))
-    st.caption("A emissão é registrada ao gerar o PDF. A primeira emissão é geral; as próximas incluem os itens alterados com seus totais acumulados. Baixar novamente reutiliza o arquivo gerado.")
+    selection = tuple(project.key for project in projects)
+    order_labels = {
+        "Última atualização": "latest_update",
+        "Ordem de seleção": "selection",
+    }
+    order_by = order_labels[st.selectbox(
+        "Ordenar projetos no relatório",
+        options=tuple(order_labels),
+        key="weekly_report_order",
+    )]
+    artifact_key = (selection, order_by)
+    st.caption("A emissão é registrada ao gerar o PDF. A primeira emissão é geral; as próximas incluem os itens alterados com seus totais acumulados. Os projetos selecionados sem alterações também aparecem com a data da última atualização. Baixar novamente reutiliza o arquivo gerado.")
     if projects and st.button("Gerar relatório PDF", key="weekly_report_generate"):
         try:
-            pdf=emit_report(db_url,tuple(project.identity for project in projects),previous_period,current_period)
+            pdf=emit_report(db_url,tuple(project.identity for project in projects),previous_period,current_period,order_by=order_by)
             if pdf is None:
                 st.info("Sem alterações desde o último relatório")
             else:
-                st.session_state["weekly_report_artifact"]={"selection":selection,"data":pdf}
+                st.session_state["weekly_report_artifact"]={"key":artifact_key,"data":pdf}
         except psycopg.errors.UndefinedTable:
             st.error("Estrutura de relatórios ainda não configurada. Aplique a migração de relatórios.")
         except Exception:
             st.error("Não foi possível gerar o relatório. Tente novamente; a referência anterior foi preservada.")
     artifact=st.session_state.get("weekly_report_artifact")
-    if artifact and artifact["selection"] == selection:
+    if artifact and artifact["key"] == artifact_key:
         st.download_button("Baixar PDF",data=artifact["data"],file_name="relatorio_semanal_pintura.pdf",mime="application/pdf",key="weekly_report_download")
 
 
