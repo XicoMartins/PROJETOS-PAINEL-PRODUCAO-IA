@@ -156,7 +156,7 @@ class WeeklySourceRepositoryTest(unittest.TestCase):
         previous,current=weekly_periods(recent)
         target={'week_start':previous.start,'target_sets':150,'updated_at':recent-timedelta(days=2)}
         requirement={'source_component_key':'CORPO','display_name':'CORPO','quantity_per_set':Decimal(1),'display_order':0,'active':True,'updated_at':recent-timedelta(days=1)}
-        movement={'processo':'CORPO ENVIO','maquinario':'Envio à Pintura','quantidade':10,'timestamp':old,'created_at':recent}
+        movement={'processo':'CORPO ENVIO','maquinario':'Envio à Pintura','quantidade':10,'timestamp':recent+timedelta(days=30),'created_at':recent}
         connection=SequencedFakeConnection([[target],[requirement],[movement]])
         result=load_weekly_source('db',identity,previous,current,connection=connection)
         self.assertEqual(result.updated_at,recent)

@@ -30,6 +30,7 @@ class EmissionTest(unittest.TestCase):
         with patch('weekly_report_data.psycopg.connect',return_value=connection),patch('weekly_report_data.load_weekly_source',return_value=source()),patch('weekly_report_data.build_pdf',return_value=b'%PDF-exact') as pdf:
             self.assertEqual(emit('db',(ID,),*weekly_periods(NOW)),b'%PDF-exact')
             self.assertEqual(pdf.call_args.args[0][0]['status'],'unchanged')
+            self.assertEqual(pdf.call_args.args[0][0]['rows'][0]['current']['total_remessa'],'152')
         self.assertFalse(any('INSERT INTO' in sql for sql,_ in cur.calls))
     def test_generation_and_save_failure_rollback(self):
         emit=self.api()
@@ -75,16 +76,19 @@ class PDFTest(unittest.TestCase):
     def test_unchanged_project_has_timestamp_and_no_reconciliation(self):
         from weekly_report_pdf import build_pdf
         snap=snapshot(ID,source())
-        report={'snapshot':snap,'previous_at':NOW,'rows':[],'status':'unchanged','source_updated_at':NOW}
+        report={'snapshot':snap,'previous_at':NOW,'rows':changes(snap,None),'status':'unchanged','source_updated_at':NOW}
         text=''.join(page.extract_text() for page in PdfReader(BytesIO(build_pdf([report],NOW))).pages)
         self.assertIn('SEM ALTERAÇÕES',text)
         self.assertIn('Última atualização dos dados: 14/10/2026 12:00',text)
+        self.assertIn('152',text)
+        self.assertIn('124',text)
+        self.assertIn('TOTAL DO PROJETO',text)
         self.assertNotIn('RECONCILIAÇÃO',text)
     def test_selected_project_order_is_pdf_page_order(self):
         from dataclasses import replace
         from weekly_report_pdf import build_pdf
         other=replace(ID,display='SECOND DISPLAY')
-        reports=[{'snapshot':snapshot(identity,source()),'previous_at':NOW,'rows':[],'status':'unchanged','source_updated_at':NOW} for identity in (other,ID)]
+        reports=[{'snapshot':snapshot(identity,source()),'previous_at':NOW,'rows':changes(snapshot(identity,source()),None),'status':'unchanged','source_updated_at':NOW} for identity in (other,ID)]
         pages=PdfReader(BytesIO(build_pdf(reports,NOW))).pages
         self.assertIn('SECOND DISPLAY',pages[0].extract_text())
         self.assertIn(ID.display,pages[1].extract_text())

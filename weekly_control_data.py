@@ -220,8 +220,7 @@ def load_weekly_source(
         entries=tuple(entries),
         detected_component_keys=detected,
         updated_at=max((instant for row in (*target_rows,*requirement_rows,*movement_rows)
-                        for field in ('updated_at','created_at','timestamp')
-                        if (instant := _as_datetime(row.get(field))) is not None), default=None),
+                        if (instant := _as_datetime(row.get('updated_at') or row.get('created_at') or row.get('timestamp'))) is not None), default=None),
         warnings=tuple(warnings),
         source_entries=tuple(movement_rows),
     )

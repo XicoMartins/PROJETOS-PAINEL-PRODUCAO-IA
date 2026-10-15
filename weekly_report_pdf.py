@@ -60,7 +60,6 @@ def build_pdf(reports,generated_at):
         if unchanged:
             updated=report.get('source_updated_at')
             story.extend([p('Nenhuma alteração desde o último relatório.',BOLD),Spacer(1,10),p('Última atualização dos dados: '+(instant(updated) if updated else 'não disponível'))])
-            continue
         heads=[]
         periods=report.get('periods') or weekly_periods(generated_at)
         for side,(label,brand,color) in enumerate((('RETORNO','multipint',WINE),('REMESSA','mtech',TEAL))):
@@ -91,9 +90,10 @@ def build_pdf(reports,generated_at):
                 for column,color in ((0,SOFT),(8,SOFT),(2,colors.HexColor('#fff0a8')),(10,colors.HexColor('#fff0a8')),(4,colors.HexColor('#dcecf8')),(12,colors.HexColor('#dcecf8')),(5,bg_send),(6,bg_ret),(13,bg_current)):
                     commands.append(('BACKGROUND',(column,n),(column,n),color))
         table=Table(data,colWidths=widths,repeatRows=2,splitByRow=1,splitInRow=0);table.setStyle(TableStyle(commands));story.append(table)
-        story.extend([Spacer(1,8),p('TOTAL DO PROJETO - resumos da base completa, incluindo itens fora desta atualização.',BOLD)])
+        total_caption='TOTAL DO PROJETO - valores atuais acumulados da base completa.' if unchanged else 'TOTAL DO PROJETO - resumos da base completa, incluindo itens fora desta atualização.'
+        story.extend([Spacer(1,8),p(total_caption,BOLD)])
         summaries=Table([[summary(snap,0,half),'',summary(snap,1,half)]],colWidths=[half,gap,half]);summaries.setStyle(TableStyle([('LEFTPADDING',(0,0),(-1,-1),0),('RIGHTPADDING',(0,0),(-1,-1),0)]));story.append(summaries)
-        if not general:
+        if not general and not unchanged:
             story.extend([Spacer(1,10),p('RECONCILIAÇÃO DOS ITENS ALTERADOS',BOLD)])
             reconciled=[[p('COMPONENTE',WHITE),p('ANTERIOR + ATUALIZAÇÃO = ACUMULADO ATUAL',WHITE)]]
             for row in report['rows']:
