@@ -26,7 +26,7 @@ from panel_views import (
     render_tv_panel,
 )
 
-APP_VERSION = "14.2.1"
+APP_VERSION = "14.2.2"
 AUTH_SESSION_KEY = "auth_authenticated"
 AUTH_USER_KEY = "auth_user"
 AUTH_ROLE_KEY = "auth_role"
@@ -199,7 +199,7 @@ def _render_dashboard_title() -> None:
 
 def _render_data_source_picker(data_sources: dict[str, str]) -> str:
     options = list(data_sources.keys())
-    selected_label = st.session_state.get("data_source_label", options[0])
+    selected_label = st.session_state.get("selected_data_source_label", options[0])
     if selected_label not in data_sources:
         selected_label = options[0]
     return st.selectbox(
@@ -289,9 +289,11 @@ def main() -> None:
 
     if selected_tab == "Geral":
         selected_label = _render_data_source_picker(data_sources)
+        # Persist independently of the widget, which Streamlit removes on other views.
+        st.session_state["selected_data_source_label"] = selected_label
     else:
         selected_label = st.session_state.get(
-            "data_source_label",
+            "selected_data_source_label",
             list(data_sources.keys())[0],
         )
         if selected_label not in data_sources:
