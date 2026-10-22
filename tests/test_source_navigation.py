@@ -20,10 +20,18 @@ def filters(frame, **kwargs):
 with patch.object(app, 'require_authentication'), patch.object(app, 'apply_branding'), patch.object(app, 'render_logout_control'), patch.object(app, 'is_admin_user', return_value=False), patch.object(app, 'load_data', side_effect=load), patch.object(app, 'apply_filters', side_effect=filters), patch.object(app, 'render_kpis'), patch.object(app, 'render_filtered_table', side_effect=lambda frame, context: st.dataframe(frame)):
     app.main()
 '''
-        for label, source in [('Base atual (CSV)', 'base_atual'), ('FORMS histórico (CSV)', 'forms'), ('Base legada (SQLite)', 'sqlite')]:
+        for label, source in [('Base atual (CSV) — março/2026', 'base_atual'), ('FORMS histórico (CSV) — janeiro/2026', 'forms'), ('Base legada (SQLite) — junho/2026', 'sqlite')]:
             with self.subTest(source=source):
                 page = AppTest.from_string(script, default_timeout=15).run()
-                page.selectbox(key='data_source_label').select(label).run()
+                picker = page.selectbox(key='data_source_label')
+                self.assertEqual(picker.options, [
+                    'FORMS histórico (CSV) — janeiro/2026',
+                    'Base atual (CSV) — março/2026',
+                    'Base legada (SQLite) — junho/2026',
+                    'FORMS-MTECH (PostgreSQL)',
+                ])
+                self.assertEqual(picker.value, 'FORMS-MTECH (PostgreSQL)')
+                picker.select(label).run()
                 page.radio(key='dashboard_sidebar_tab').set_value('Registros').run()
                 self.assertEqual(page.dataframe[0].value['source'].tolist(), [source])
                 page.text_input(key='navigation_test_filter').input('anterior').run()

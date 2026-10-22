@@ -26,7 +26,8 @@ from panel_views import (
     render_tv_panel,
 )
 
-APP_VERSION = "14.2.2"
+APP_VERSION = "14.2.3"
+DEFAULT_DATA_SOURCE_LABEL = "FORMS-MTECH (PostgreSQL)"
 AUTH_SESSION_KEY = "auth_authenticated"
 AUTH_USER_KEY = "auth_user"
 AUTH_ROLE_KEY = "auth_role"
@@ -199,9 +200,9 @@ def _render_dashboard_title() -> None:
 
 def _render_data_source_picker(data_sources: dict[str, str]) -> str:
     options = list(data_sources.keys())
-    selected_label = st.session_state.get("selected_data_source_label", options[0])
+    selected_label = st.session_state.get("selected_data_source_label", DEFAULT_DATA_SOURCE_LABEL)
     if selected_label not in data_sources:
-        selected_label = options[0]
+        selected_label = DEFAULT_DATA_SOURCE_LABEL
     return st.selectbox(
         "Fonte dos dados",
         options,
@@ -257,10 +258,10 @@ def main() -> None:
     require_authentication()
 
     data_sources = {
-        "FORMS-MTECH (PostgreSQL)": "forms_postgres",
-        "Base atual (CSV)": "base_atual",
-        "FORMS histórico (CSV)": "forms",
-        "Base legada (SQLite)": "sqlite",
+        "FORMS histórico (CSV) — janeiro/2026": "forms",
+        "Base atual (CSV) — março/2026": "base_atual",
+        "Base legada (SQLite) — junho/2026": "sqlite",
+        DEFAULT_DATA_SOURCE_LABEL: "forms_postgres",
     }
     nav_tabs = build_navigation_tabs(is_admin=is_admin_user())
     if st.session_state.get("dashboard_sidebar_tab") == "Gráficos":
@@ -294,10 +295,10 @@ def main() -> None:
     else:
         selected_label = st.session_state.get(
             "selected_data_source_label",
-            list(data_sources.keys())[0],
+            DEFAULT_DATA_SOURCE_LABEL,
         )
         if selected_label not in data_sources:
-            selected_label = list(data_sources.keys())[0]
+            selected_label = DEFAULT_DATA_SOURCE_LABEL
     selected_source = data_sources[selected_label]
 
     if selected_tab == "Remessas pintura":
