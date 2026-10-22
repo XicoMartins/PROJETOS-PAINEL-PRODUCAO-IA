@@ -1,5 +1,7 @@
 from pathlib import Path
 
+BUNDLED_DATA_DIR = Path(__file__).resolve().parent / "data" / "sources"
+
 DATA_DIR = Path(r"S:\PROJETOS EM ANDAMENTO\PAINEL DE CONTROLE MTECH\PROGRAMAS\PROJETOS -BACKEND\output")
 BACKEND_DIR = DATA_DIR.parent
 SQLITE_DB_PATH = BACKEND_DIR / "db.sqlite3"

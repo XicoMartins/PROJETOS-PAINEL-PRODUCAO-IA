@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from contextlib import closing
 import os
 import re
 import sqlite3
@@ -12,7 +13,7 @@ from typing import Iterable
 import pandas as pd
 import streamlit as st
 
-from constants import DATA_DIR, FORMS_DIR, SQLITE_DB_PATH
+from constants import BUNDLED_DATA_DIR, DATA_DIR, FORMS_DIR, SQLITE_DB_PATH
 
 try:
     import psycopg
@@ -164,7 +165,7 @@ def _read_sqlite_source(path: Path) -> pd.DataFrame:
             quantidade_total
         FROM core_productionentry
     """
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn:
         return pd.read_sql_query(query, conn)
 
 
@@ -490,11 +491,13 @@ def load_data(source: str = "base_atual") -> tuple[pd.DataFrame, Path | None, di
     if source == "forms_postgres":
         return _load_data_cached(source, "postgresql", None)
     if source == "forms":
-        path = _pick_forms_csv(FORMS_DIR)
+        path = _pick_forms_csv(FORMS_DIR) or _pick_forms_csv(BUNDLED_DATA_DIR / "forms")
     elif source == "sqlite":
-        path = SQLITE_DB_PATH
+        path = SQLITE_DB_PATH if SQLITE_DB_PATH.is_file() else BUNDLED_DATA_DIR / "db.sqlite3"
     else:
         path = DATA_DIR / "registros.csv"
+        if not path.is_file():
+            path = BUNDLED_DATA_DIR / "registros.csv"
     if path is None:
         return _empty_result()
     try:

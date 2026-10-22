@@ -26,7 +26,7 @@ from panel_views import (
     render_tv_panel,
 )
 
-APP_VERSION = "14.2.0"
+APP_VERSION = "14.2.1"
 AUTH_SESSION_KEY = "auth_authenticated"
 AUTH_USER_KEY = "auth_user"
 AUTH_ROLE_KEY = "auth_role"
@@ -258,6 +258,9 @@ def main() -> None:
 
     data_sources = {
         "FORMS-MTECH (PostgreSQL)": "forms_postgres",
+        "Base atual (CSV)": "base_atual",
+        "FORMS histórico (CSV)": "forms",
+        "Base legada (SQLite)": "sqlite",
     }
     nav_tabs = build_navigation_tabs(is_admin=is_admin_user())
     if st.session_state.get("dashboard_sidebar_tab") == "Gráficos":

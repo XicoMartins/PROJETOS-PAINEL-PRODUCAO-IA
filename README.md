@@ -185,3 +185,16 @@ As estruturas reproduzíveis estão em `supabase/migrations/`: metas/requisitos
 (`20260825_create_painting_weekly_control.sql`) e referências das emissões
 (`20261014142330_painting_report_checkpoints.sql`). O banco deve conter essas
 estruturas antes de usar a tela; esta integração não executa migrations.
+
+## Bases disponíveis no painel online
+
+O seletor **Fonte dos dados** oferece PostgreSQL, Base atual (CSV), FORMS
+histórico (CSV) e Base legada (SQLite). No computador local, os arquivos
+originais continuam tendo prioridade. Quando não estão acessíveis (como no
+Streamlit Cloud), o painel usa as cópias em `data/sources`, com caminhos
+relativos ao projeto. O SQLite publicado contém somente `core_productionentry`.
+
+As cópias representam os dados exportados em 22/10/2026 e não são sincronizadas
+automaticamente. Para atualizá-las a partir dos arquivos locais, execute
+`python scripts/sync_dashboard_sources.py` e publique os arquivos atualizados.
+O PostgreSQL continua sendo consultado diretamente, com cache de 60 segundos.
