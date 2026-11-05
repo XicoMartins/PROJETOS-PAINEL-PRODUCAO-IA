@@ -59,3 +59,7 @@ next-env.d.ts
 /Controle PINTURA Anisio 2026.xlsx
 /.tmp-ppt-reference/
 /.cache/
+
+# Artefatos locais de trabalho que nao devem bloquear a importacao automatica
+/.codex-*/
+/reference.png
