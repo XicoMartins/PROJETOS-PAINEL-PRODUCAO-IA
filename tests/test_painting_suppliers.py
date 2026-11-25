@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from PIL import Image, ImageChops
 from pypdf import PdfReader
+from reportlab.lib.pagesizes import A4, landscape
 
 from dashboard_png import build_dashboard_png
 from streamlit_app import build_projects, render_dashboard
@@ -18,7 +19,7 @@ from weekly_control import build_weekly_control, weekly_periods
 from weekly_control_data import load_weekly_source
 from weekly_control_view import render_weekly_control_html
 from weekly_report import changes, snapshot
-from weekly_report_pdf import build_pdf
+from weekly_report_pdf import build_pdf, component_cell
 
 
 SUPPLIERS = ("SCHUNCK", "Multipint", "Aquapint", "Multipint")
@@ -116,6 +117,14 @@ class PaintingSupplierTest(unittest.TestCase):
         self.assertEqual([item["key"] for item in result], ["component:BASE"])
         self.assertEqual(result[0]["deltas"]["total_remessa"], "0")
         self.assertEqual(result[0]["current"].get("painting_suppliers"), ["Aquapint", "Multipint"])
+
+    def test_weekly_pdf_supplier_group_fits_the_return_component_cell(self):
+        page_width, _ = landscape(A4)
+        panel_width = (page_width - 40 - 10) / 2
+        available_width = panel_width * .26 - 8
+        _, _, supplier_group = component_cell("BASE", tuple(DISPLAY_ORDER), available_width)
+        rendered_width, _ = supplier_group.wrap(available_width, 100)
+        self.assertLessEqual(rendered_width, available_width)
 
     def test_weekly_pdf_embeds_process_logos_and_renders_schunck_as_text(self):
         def page(suppliers):

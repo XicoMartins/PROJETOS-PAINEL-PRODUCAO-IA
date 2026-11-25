@@ -490,8 +490,8 @@ def load_rows(db_url: str) -> list[dict]:
                 """
                 SELECT id, timestamp, cliente, display, numero_display, codigo_pintura,
                        maquinario, processo, data_producao, quantidade, quantidade_total, created_at,
-                       fornecedor_pintura
-                  FROM painting_entries
+                       to_jsonb(entry)->>'fornecedor_pintura' AS fornecedor_pintura
+                  FROM painting_entries AS entry
               ORDER BY timestamp DESC NULLS LAST, id DESC
                 """
             )

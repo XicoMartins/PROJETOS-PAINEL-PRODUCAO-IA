@@ -44,7 +44,7 @@ def component_cell(name, suppliers, width):
     for supplier in suppliers:
         path = supplier_logo_path(supplier)
         if path is not None and path.is_file():
-            mark_width = 26 if supplier == "Aquapint" else 31
+            mark_width = 25 if supplier == "Aquapint" else 29
             marks.append(logo(path, mark_width))
             widths.append(mark_width + 2)
         else:
