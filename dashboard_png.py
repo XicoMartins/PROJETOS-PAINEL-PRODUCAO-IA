@@ -43,11 +43,14 @@ import os
 import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from statistics import mean
 from typing import Any, Iterable, Mapping, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
+
+from painting_suppliers import painting_suppliers, supplier_logo_path
 
 
 DateLike = date | datetime | str
@@ -72,6 +75,7 @@ class ProcessRow:
     returned_quantity: float = 0
     sent_sets: int | None = None
     returned_sets: int | None = None
+    painting_suppliers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -241,6 +245,7 @@ def _normalize_projects(projects: Sequence[Any]) -> list[ProjectRow]:
                 ) or 0,
                 sent_sets=_set_count(_field(process, "sent_sets")),
                 returned_sets=_set_count(_field(process, "returned_sets")),
+                painting_suppliers=painting_suppliers(_field(process, "painting_suppliers", default=()) or ()),
             )
             for process in raw_processes
         )
@@ -631,6 +636,26 @@ def _format_sets(value: int | None) -> str:
     return "—" if value is None else str(int(value))
 
 
+@lru_cache(maxsize=3)
+def _supplier_png_label(name: str) -> Image.Image:
+    path = supplier_logo_path(name)
+    if path is not None:
+        try:
+            with Image.open(path) as source:
+                mark = source.convert("RGBA")
+            mark.thumbnail((43, 21), Image.Resampling.LANCZOS)
+            label = Image.new("RGBA", mark.size, "white")
+            label.alpha_composite(mark)
+            return label
+        except OSError:
+            pass
+    font = FONTS.get(9, True)
+    label = Image.new("RGBA", (math.ceil(font.getlength(name)), 21))
+    label_draw = ImageDraw.Draw(label)
+    _draw_centered(label_draw, (0, 0, label.width, label.height), name, font, "#385271")
+    return label
+
+
 def _summary_columns(weekly: bool) -> list[tuple[str, float]]:
     if weekly:
         return [
@@ -875,8 +900,28 @@ def generate_dashboard_png(
     timeline_h = timeline_title_h + timeline_header_h + max(1, len(normalized_projects)) * timeline_row_h + 13
     table_header_h = 38
     table_row_h = 32
-    table_row_count = sum(1 + len(project.processes) for project in normalized_projects)
-    table_h = table_header_h + max(1, table_row_count) * table_row_h + 4
+    gap = 14
+    table_width = int((width - 2 * margin - gap) * .69)
+    weekly = any(
+        project.sent_per_week is not None or project.return_per_week is not None
+        for project in normalized_projects
+    )
+    columns = _summary_columns(weekly)
+    total_ratio = sum(ratio for _, ratio in columns)
+    widths = [table_width * ratio / total_ratio for _, ratio in columns]
+    process_name_width = widths[0] - 55
+    process_font = FONTS.get(10, True)
+
+    table_rows: list[tuple[str, ProjectRow | ProcessRow, int, int, tuple[Image.Image, ...]]] = []
+    for display_index, project in enumerate(normalized_projects, 1):
+        table_rows.append(("display", project, display_index, table_row_h, ()))
+        for process in project.processes:
+            marks = tuple(_supplier_png_label(name) for name in process.painting_suppliers)
+            labels_width = sum(mark.width + 5 for mark in marks)
+            wraps = marks and process_font.getlength(process.name) + labels_width > process_name_width
+            table_rows.append(("process", process, display_index, 44 if wraps else table_row_h, marks))
+    rows_height = sum(row[3] for row in table_rows)
+    table_h = table_header_h + max(table_row_h, rows_height) + 4
     insight_row_h = 54
     insight_h = 50 + max(1, min(5, len(normalized_insights))) * insight_row_h + 6
     table_panel_h = max(205, table_h)
@@ -1030,20 +1075,11 @@ def generate_dashboard_png(
 
     # Tabela e insights.
     bottom_top = timeline_box[3] + 13
-    gap = 14
-    left_w = int((width - 2 * margin - gap) * .69)
-    table_box = (margin, bottom_top, margin + left_w, bottom_top + table_panel_h)
+    table_box = (margin, bottom_top, margin + table_width, bottom_top + table_panel_h)
     insight_box = (table_box[2] + gap, bottom_top, width - margin, bottom_top + insight_panel_h)
     _panel(draw, table_box, radius=13, shadow=False)
     _panel(draw, insight_box, radius=13, shadow=False)
 
-    weekly = any(
-        project.sent_per_week is not None or project.return_per_week is not None
-        for project in normalized_projects
-    )
-    columns = _summary_columns(weekly)
-    total_ratio = sum(ratio for _, ratio in columns)
-    widths = [(table_box[2] - table_box[0]) * ratio / total_ratio for _, ratio in columns]
     header_bottom = bottom_top + table_header_h
     draw.rounded_rectangle((table_box[0], bottom_top, table_box[2], header_bottom+3), radius=13, fill=P.navy)
     draw.rectangle((table_box[0], header_bottom-4, table_box[2], header_bottom+3), fill=P.navy)
@@ -1056,14 +1092,9 @@ def generate_dashboard_png(
         else:
             _draw_centered(draw, (cursor, bottom_top, cursor+col_w, header_bottom), label, FONTS.get(10, True), "white")
         cursor += col_w
-    table_rows: list[tuple[str, Any, int]] = []
-    for display_index, project in enumerate(normalized_projects, 1):
-        table_rows.append(("display", project, display_index))
-        table_rows.extend(("process", process, display_index) for process in project.processes)
-
-    for row_index, (row_kind, item, display_index) in enumerate(table_rows):
-        top = header_bottom + row_index * table_row_h
-        bottom = top + table_row_h
+    top = header_bottom
+    for row_index, (row_kind, item, display_index, row_height, marks) in enumerate(table_rows):
+        bottom = top + row_height
         if row_kind == "process":
             draw.rectangle((table_box[0]+1, top, table_box[2]-1, bottom), fill="#F2F7FA")
         elif row_index % 2:
@@ -1082,14 +1113,22 @@ def generate_dashboard_png(
                     draw.text((cursor+32, top+11), text, font=font, fill=P.ink)
                 else:
                     draw.text((cursor+31, top+10), "└", font=font, fill=P.teal)
-                    text = _ellipsize(draw, value, font, col_w-55)
-                    draw.text((cursor+47, top+11), text, font=font, fill="#385271")
+                    name_x = int(cursor + 47)
+                    text = _ellipsize(draw, value, process_font, process_name_width)
+                    draw.text((name_x, top + 11), text, font=process_font, fill="#385271")
+                    wrapped = row_height > table_row_h
+                    mark_x = name_x if wrapped else name_x + math.ceil(process_font.getlength(text)) + 5
+                    mark_center_y = top + (31 if wrapped else table_row_h // 2)
+                    for mark in marks:
+                        image.paste(mark, (mark_x, mark_center_y - mark.height // 2), mask=mark)
+                        mark_x += mark.width + 5
             elif col_index == len(values)-1:
                 _draw_status(draw, (int(cursor), top, int(cursor+col_w), bottom), str(value), compact=True)
             else:
                 color = "#385271" if row_kind == "process" else P.ink
                 _draw_centered(draw, (cursor, top, cursor+col_w, bottom), value, FONTS.get(10, False), color)
             cursor += col_w
+        top = bottom
     if not normalized_projects:
         _draw_centered(draw, (table_box[0], header_bottom, table_box[2], header_bottom+table_row_h), "Nenhum dado no recorte", FONTS.get(10), P.muted)
 

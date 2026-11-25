@@ -7,6 +7,7 @@ from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 
+from painting_suppliers import SUPPLIER_CSS, supplier_labels_html, supplier_logo_css
 from weekly_control import (
     SAO_PAULO,
     ProjectIdentity,
@@ -20,7 +21,6 @@ from weekly_control import (
 LOGO_DIR = Path(__file__).resolve().parent / "assets" / "logos"
 LOGO_FILES = {
     "mtech": ("mtech.png", "MTech"),
-    "multipint": ("multipint.png", "Multipint"),
 }
 
 
@@ -94,10 +94,8 @@ WEEKLY_CONTROL_CSS = """
     vertical-align: -.16em;
   }
   .weekly-brand-logo-mtech { width: 3.43em; }
-  .weekly-brand-logo-multipint { height: 1.35em; width: 3.39em; }
   .weekly-panel-head .weekly-brand-logo { height: 34px; }
   .weekly-panel-head .weekly-brand-logo-mtech { width: 117px; }
-  .weekly-panel-head .weekly-brand-logo-multipint { width: 85px; }
   .weekly-table th .weekly-brand-logo {
     background-color: white;
     border-radius: 3px;
@@ -109,7 +107,6 @@ WEEKLY_CONTROL_CSS = """
     vertical-align: -.35em;
   }
   .weekly-table th .weekly-brand-logo-mtech { width: 69px; }
-  .weekly-table th .weekly-brand-logo-multipint { width: 50px; }
   .weekly-explanation .weekly-brand-logo {
     height: 18px;
     max-height: 18px;
@@ -117,7 +114,6 @@ WEEKLY_CONTROL_CSS = """
     vertical-align: -.28em;
   }
   .weekly-explanation .weekly-brand-logo-mtech { width: 62px; }
-  .weekly-explanation .weekly-brand-logo-multipint { width: 45px; }
   .weekly-panel-head .weekly-period { color: #51565a; font-size: 14px; margin: 5px 0 0; }
   .weekly-target {
     background: #f3e8ea;
@@ -215,13 +211,10 @@ WEEKLY_CONTROL_CSS = """
     .weekly-next-action { min-width: 0; }
     .weekly-panel-head .weekly-brand-logo { height: 28px; }
     .weekly-panel-head .weekly-brand-logo-mtech { width: 96px; }
-    .weekly-panel-head .weekly-brand-logo-multipint { width: 70px; }
     .weekly-table th .weekly-brand-logo { height: 18px; }
     .weekly-table th .weekly-brand-logo-mtech { width: 62px; }
-    .weekly-table th .weekly-brand-logo-multipint { width: 45px; }
     .weekly-explanation .weekly-brand-logo { height: 16px; }
     .weekly-explanation .weekly-brand-logo-mtech { width: 55px; }
-    .weekly-explanation .weekly-brand-logo-multipint { width: 40px; }
   }
 </style>
 """
@@ -238,7 +231,7 @@ def _logo_data_uri(brand: str) -> str | None:
     return f"data:image/png;base64,{payload}"
 
 
-def _weekly_control_css() -> str:
+def _weekly_control_css(control: WeeklyControl) -> str:
     logo_rules = ""
     for brand in LOGO_FILES:
         data_uri = _logo_data_uri(brand)
@@ -247,7 +240,12 @@ def _weekly_control_css() -> str:
                 f'.weekly-brand-logo-{brand}'
                 f'{{background-image:url("{data_uri}");}}'
             )
-    return WEEKLY_CONTROL_CSS.replace("</style>", f"  {logo_rules}\n</style>")
+    supplier_rules = supplier_logo_css(
+        name for row in (*control.components, *control.paint_rows) for name in row.painting_suppliers
+    )
+    return WEEKLY_CONTROL_CSS.replace(
+        "</style>", f"  {logo_rules}{SUPPLIER_CSS}{supplier_rules}\n</style>"
+    )
 
 
 def _brand_logo(brand: str) -> str:
@@ -312,7 +310,7 @@ def _row(
     row_class = ' class="weekly-paint-row"' if paint else ""
     return (
         f"<tr{row_class}>"
-        f'<th scope="row">{_safe(row.display_name)}</th>'
+        f'<th scope="row">{_safe(row.display_name)}{supplier_labels_html(row.painting_suppliers)}</th>'
         f"<td>{format_pt_br(row.quantity_per_set)}</td>"
         f'<td class="weekly-remittance">{format_pt_br(row.total_remessa)}</td>'
         f"<td>{format_pt_br(row.total_retorno)}</td>"
@@ -408,7 +406,6 @@ def render_weekly_control_html(
         f"{identity.cliente} · Nº {identity.numero_display} · {identity.codigo_pintura}"
     )
     mtech_logo = _brand_logo("mtech")
-    multipint_logo = _brand_logo("multipint")
     body = f"""<section class="weekly-control" aria-labelledby="weekly-control-title">
       <header class="weekly-hero">
         <div>
@@ -418,8 +415,8 @@ def render_weekly_control_html(
         <div class="weekly-project"><strong>{_safe(project_title)}</strong><span>{_safe(identity_line)}</span><span class="weekly-updated">Última atualização: {_safe(updated)}</span></div>
       </header>
       <div class="weekly-panels">
-        {_panel(f'Retorno {multipint_logo}', previous_period, control.previous_summary.target_sets, f'A RETORNAR {multipint_logo}', f'Pendente de pintura / entrega na {mtech_logo}', 'previous', control, False)}
-        {_panel(f'Remessa {mtech_logo}', previous_period, control.current_summary.target_sets, f'A ENVIAR {mtech_logo}', f'Pendente de envio da {mtech_logo} à {multipint_logo}', 'current', control, True)}
+        {_panel('Retorno', previous_period, control.previous_summary.target_sets, 'A RETORNAR', f'Pendente de pintura / entrega na {mtech_logo}', 'previous', control, False)}
+        {_panel(f'Remessa {mtech_logo}', previous_period, control.current_summary.target_sets, f'A ENVIAR {mtech_logo}', f'Pendente de envio da {mtech_logo} para pintura externa', 'current', control, True)}
       </div>
       {warning_html}
       <footer class="weekly-footer">
@@ -431,7 +428,7 @@ def render_weekly_control_html(
       </footer>
     </section>
     """
-    return _weekly_control_css() + "".join(line.strip() for line in body.splitlines())
+    return _weekly_control_css(control) + "".join(line.strip() for line in body.splitlines())
 
 
 def render_weekly_empty_html(title: str, message: str) -> str:

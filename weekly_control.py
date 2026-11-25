@@ -9,6 +9,8 @@ from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
 
+from painting_suppliers import painting_supplier, painting_suppliers
+
 
 SAO_PAULO = ZoneInfo("America/Sao_Paulo")
 
@@ -33,6 +35,7 @@ class MovementEntry:
     movement: Literal["remessa", "retorno"]
     quantity: Decimal
     occurred_at: datetime
+    painting_supplier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,7 @@ class WeeklyComponent:
     return_remittance_balance: Decimal | None
     previous_balance: Decimal | None
     current_balance: Decimal | None
+    painting_suppliers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -188,9 +192,13 @@ def build_weekly_control(
     entries: tuple[MovementEntry, ...],
 ) -> WeeklyControl:
     totals: dict[tuple[str, str], Decimal] = {}
+    suppliers: dict[str, set[str]] = {}
     for entry in entries:
-        key = (normalize_text(entry.component_key), entry.movement)
+        component = normalize_text(entry.component_key)
+        key = (component, entry.movement)
         totals[key] = totals.get(key, Decimal("0")) + entry.quantity
+        if supplier := painting_supplier(entry.painting_supplier):
+            suppliers.setdefault(component, set()).add(supplier)
 
     rows: list[WeeklyComponent] = []
     for requirement in sorted(
@@ -213,6 +221,7 @@ def build_weekly_control(
                     previous_target,
                     requirement.quantity_per_set,
                 ),
+                painting_suppliers=painting_suppliers(suppliers.get(key, ())),
                 previous_balance=_target_balance(
                     retorno,
                     previous_target,
@@ -240,6 +249,7 @@ def build_weekly_control(
             return_remittance_balance=None,
             previous_balance=None,
             current_balance=None,
+            painting_suppliers=painting_suppliers(suppliers.get(key, ())),
         )
         for key in sorted({item[0] for item in totals if item[0].startswith("TINTA")})
     )

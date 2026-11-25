@@ -3,6 +3,7 @@ import json
 from datetime import date, datetime
 from dataclasses import asdict
 from decimal import Decimal
+from painting_suppliers import painting_supplier
 from weekly_control import build_weekly_control, ComponentRequirement, normalize_text, project_key, component_key
 
 def decimal_string(value):
@@ -23,6 +24,23 @@ def complete_requirements(source):
         requirements.append(ComponentRequirement(key,key,None,order,True))
     return tuple(sorted(requirements,key=lambda item:item.display_order))
 
+def _fingerprint_entry(entry):
+    def json_value(item):
+        if isinstance(item, Decimal):
+            return decimal_string(item)
+        if isinstance(item, (datetime, date)):
+            return item.isoformat()
+        if item is None or isinstance(item, (str, int, float, bool)):
+            return item
+        return str(item)
+
+    # Rows written before fornecedor_pintura existed have no key in saved checkpoints.
+    entry = dict(entry)
+    if not painting_supplier(entry.get("fornecedor_pintura")):
+        entry.pop("fornecedor_pintura", None)
+    return json.dumps(entry, sort_keys=True, default=json_value, ensure_ascii=False)
+
+
 def snapshot(identity, source):
     requirements=complete_requirements(source)
     order={normalize_text(item.source_component_key):item.display_order for item in requirements}
@@ -33,13 +51,19 @@ def snapshot(identity, source):
             value={key:decimal_string(item) if isinstance(item,Decimal) else item for key,item in asdict(row).items()}
             value['kind']=kind
             value['display_order']=order.get(row.component_key)
-            def json_value(item):
-                if isinstance(item,Decimal): return decimal_string(item)
-                if isinstance(item,(datetime,date)): return item.isoformat()
-                if item is None or isinstance(item,(str,int,float,bool)): return item
-                return str(item)
-            value['source_entries']=sorted(json.dumps(entry,sort_keys=True,default=json_value,ensure_ascii=False) for entry in source.source_entries if component_key(entry.get('processo'))==row.component_key)
-            value['entries']=sorted([[entry.movement,decimal_string(entry.quantity),entry.occurred_at.isoformat()] for entry in source.entries if normalize_text(entry.component_key)==row.component_key])
+            if row.painting_suppliers:
+                value["painting_suppliers"] = list(row.painting_suppliers)
+            else:
+                value.pop("painting_suppliers")
+            value["source_entries"] = sorted(
+                _fingerprint_entry(entry) for entry in source.source_entries
+                if component_key(entry.get("processo")) == row.component_key
+            )
+            value["entries"] = sorted(
+                [entry.movement, decimal_string(entry.quantity), entry.occurred_at.isoformat()]
+                + ([supplier] if (supplier := painting_supplier(entry.painting_supplier)) else [])
+                for entry in source.entries if normalize_text(entry.component_key) == row.component_key
+            )
             rows[kind+':'+row.component_key]=value
     return {'project_key':project_key(identity),'identity':asdict(identity),'targets':[source.previous_target,source.current_target], 'rows':rows}
 

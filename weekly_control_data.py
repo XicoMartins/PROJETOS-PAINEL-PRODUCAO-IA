@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 import psycopg
 import psycopg.rows
 
+from painting_suppliers import painting_supplier
 from weekly_control import (
     ComponentRequirement,
     MovementEntry,
@@ -203,6 +204,7 @@ def load_weekly_source(
                 movement=movement,
                 quantity=quantity,
                 occurred_at=occurred_at,
+                painting_supplier=painting_supplier(row.get("fornecedor_pintura")),
             )
         )
     detected = tuple(

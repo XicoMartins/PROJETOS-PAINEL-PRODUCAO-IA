@@ -69,7 +69,7 @@ class WeeklyControlViewTest(unittest.TestCase):
 
         self.assertNotIn("MODELO 1 · EXECUTIVO INDUSTRIAL", rendered)
         self.assertIn("Controle semanal de remessas e retornos", rendered)
-        self.assertIn('aria-label="Multipint"', rendered)
+        self.assertNotIn('aria-label="Multipint"', rendered)
         self.assertIn('aria-label="MTech"', rendered)
         self.assertNotIn("Semana passada", rendered)
         self.assertNotIn("Semana atual", rendered)
@@ -81,7 +81,7 @@ class WeeklyControlViewTest(unittest.TestCase):
         html_body = rendered.split("</style>", 1)[1]
         self.assertIsNone(re.search(r"(?m)^\s{4,}<", html_body))
 
-    def test_replaces_all_weekly_brand_names_with_large_proportional_logos(self):
+    def test_legacy_history_keeps_the_proportional_mtech_logo_only(self):
         from weekly_control_view import render_weekly_control_html
 
         rendered = render_weekly_control_html(
@@ -102,13 +102,10 @@ class WeeklyControlViewTest(unittest.TestCase):
             ),
             5,
         )
-        self.assertEqual(
-            rendered.count(
-                '<span class="weekly-brand-logo weekly-brand-logo-multipint"'
-            ),
-            3,
-        )
-        self.assertEqual(rendered.count("data:image/png;base64,"), 2)
+        self.assertNotIn('aria-label="Multipint"', rendered)
+        self.assertNotIn('aria-label="Aquapint"', rendered)
+        self.assertNotIn("SCHUNCK", visible_text)
+        self.assertEqual(rendered.count("data:image/png;base64,"), 1)
         self.assertIn("background-size: contain", rendered)
         self.assertRegex(
             rendered,
@@ -138,24 +135,18 @@ class WeeklyControlViewTest(unittest.TestCase):
         )
         for proportional_rule in (
             ".weekly-panel-head .weekly-brand-logo-mtech { width: 117px; }",
-            ".weekly-panel-head .weekly-brand-logo-multipint { width: 85px; }",
             ".weekly-table th .weekly-brand-logo-mtech { width: 69px; }",
-            ".weekly-table th .weekly-brand-logo-multipint { width: 50px; }",
             ".weekly-explanation .weekly-brand-logo-mtech { width: 62px; }",
-            ".weekly-explanation .weekly-brand-logo-multipint { width: 45px; }",
             ".weekly-panel-head .weekly-brand-logo-mtech { width: 96px; }",
-            ".weekly-panel-head .weekly-brand-logo-multipint { width: 70px; }",
             ".weekly-table th .weekly-brand-logo { height: 18px; }",
             ".weekly-table th .weekly-brand-logo-mtech { width: 62px; }",
-            ".weekly-table th .weekly-brand-logo-multipint { width: 45px; }",
             ".weekly-explanation .weekly-brand-logo-mtech { width: 55px; }",
-            ".weekly-explanation .weekly-brand-logo-multipint { width: 40px; }",
         ):
             self.assertIn(proportional_rule, rendered)
 
     def test_logo_assets_are_valid_proportional_and_web_sized(self):
         logo_dir = Path(__file__).resolve().parents[1] / "assets" / "logos"
-        expected_ratios = {"mtech.png": 3.43, "multipint.png": 2.51}
+        expected_ratios = {"mtech.png": 3.43, "multipint.png": 2.51, "aquapint.png": 1.62}
 
         for filename, expected_ratio in expected_ratios.items():
             with self.subTest(filename=filename):
@@ -215,7 +206,7 @@ class WeeklyControlViewTest(unittest.TestCase):
                 view.LOGO_DIR = original_logo_dir
                 view._logo_data_uri.cache_clear()
 
-        self.assertIn("Retorno Multipint", rendered)
+        self.assertIn("<h2>Retorno</h2>", rendered)
         self.assertIn("Remessa MTech", rendered)
         self.assertNotIn("data:image/png;base64,", rendered)
 
@@ -287,7 +278,7 @@ class WeeklyControlViewTest(unittest.TestCase):
         self.assertIn("—", rendered)
         self.assertLess(rendered.index("CHAVE"), rendered.index("TINTA VM"))
 
-    def test_return_panel_places_a_enviar_mtech_before_a_retornar_multipint(self):
+    def test_return_panel_places_a_enviar_mtech_before_a_retornar(self):
         from weekly_control_view import render_weekly_control_html
 
         instant = datetime(2026, 9, 2, 12, tzinfo=ZoneInfo("America/Sao_Paulo"))
@@ -345,7 +336,7 @@ class WeeklyControlViewTest(unittest.TestCase):
                 "RETORNO",
                 "SALDO",
                 "A ENVIAR MTech",
-                "A RETORNAR Multipint",
+                "A RETORNAR",
             ],
         )
         self.assertEqual(

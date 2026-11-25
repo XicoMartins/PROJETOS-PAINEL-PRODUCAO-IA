@@ -28,6 +28,13 @@ from painting_references import (
     reference_key,
     scan_reference_directory,
 )
+from painting_suppliers import (
+    SUPPLIER_CSS,
+    painting_supplier,
+    painting_suppliers,
+    supplier_labels_html,
+    supplier_logo_css,
+)
 from weekly_control import (
     ComponentRequirement,
     build_weekly_control,
@@ -354,6 +361,7 @@ class Entry:
     color: str
     process_name: str
     updated_at: datetime
+    painting_supplier: str | None = None
 
 
 @dataclass
@@ -363,6 +371,7 @@ class ProcessVolume:
     returned_quantity: float
     sent_sets: int | None = None
     returned_sets: int | None = None
+    painting_suppliers: tuple[str, ...] = ()
 
 
 @dataclass
@@ -480,7 +489,8 @@ def load_rows(db_url: str) -> list[dict]:
             cursor.execute(
                 """
                 SELECT id, timestamp, cliente, display, numero_display, codigo_pintura,
-                       maquinario, processo, data_producao, quantidade, quantidade_total, created_at
+                       maquinario, processo, data_producao, quantidade, quantidade_total, created_at,
+                       fornecedor_pintura
                   FROM painting_entries
               ORDER BY timestamp DESC NULLS LAST, id DESC
                 """
@@ -586,6 +596,7 @@ def build_projects(
                     painting_code_parts(row.get("codigo_pintura"))[1],
                 ),
                 updated_at=parse_datetime(row.get("timestamp") or row.get("created_at"), occurred_on),
+                painting_supplier=painting_supplier(row.get("fornecedor_pintura")),
             )
         )
     if not parsed:
@@ -631,6 +642,7 @@ def build_projects(
         total_sent = sum(entry.quantity for entry in all_entries if entry.movement == "remessa")
         total_returned = sum(entry.quantity for entry in all_entries if entry.movement == "retorno")
         process_totals: dict[str, dict[str, object]] = {}
+        process_suppliers: dict[str, set[str]] = defaultdict(set)
         for entry in all_entries:
             key = normalize(entry.process_name)
             current = process_totals.setdefault(
@@ -639,6 +651,8 @@ def build_projects(
             )
             quantity_key = "sent" if entry.movement == "remessa" else "returned"
             current[quantity_key] = float(current[quantity_key]) + entry.quantity
+            if entry.painting_supplier:
+                process_suppliers[key].add(entry.painting_supplier)
         project_reference_warnings: list[str] = []
         processes: list[ProcessVolume] = []
         for values in sorted(process_totals.values(), key=lambda item: normalize(item["name"])):
@@ -664,6 +678,7 @@ def build_projects(
                     returned_quantity=float(values["returned"]),
                     sent_sets=sent_sets,
                     returned_sets=returned_sets,
+                    painting_suppliers=painting_suppliers(process_suppliers[normalize(process_label)]),
                 )
             )
 
@@ -977,7 +992,8 @@ def render_dashboard(
         for process in project.processes:
             summary_rows.append(
                 f"<tr class='summary-process-row'>"
-                f"<td><span class='summary-branch'>└</span>{safe(process.name)}</td>"
+                f"<td><span class='summary-branch'>└</span>{safe(process.name)}"
+                f"{supplier_labels_html(process.painting_suppliers)}</td>"
                 f"<td>—</td>"
                 f"<td class='total-value'>{format_quantity(process.sent_quantity)}</td>"
                 f"<td>{format_sets(process.sent_sets)}</td>"
@@ -1062,6 +1078,10 @@ def render_dashboard(
       </div>
     </div>
     """
+    logos = supplier_logo_css(
+        name for project in projects for process in project.processes for name in process.painting_suppliers
+    )
+    st.markdown(f"<style>{SUPPLIER_CSS}{logos}</style>", unsafe_allow_html=True)
     st.markdown(content, unsafe_allow_html=True)
 
 

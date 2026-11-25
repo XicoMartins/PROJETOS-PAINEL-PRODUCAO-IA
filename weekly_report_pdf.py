@@ -6,7 +6,9 @@ from decimal import Decimal
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, PageBreak, Image
+from painting_suppliers import supplier_logo_path
 from weekly_control import SAO_PAULO, weekly_periods
 GRAPHITE=colors.HexColor('#202326'); SOFT=colors.HexColor('#34383d'); WINE=colors.HexColor('#7f1d2d'); TEAL=colors.HexColor('#0f716d')
 STYLE=ParagraphStyle('cell',fontName='Helvetica',fontSize=7.5,leading=10,wordWrap='CJK')
@@ -23,11 +25,53 @@ def reconciliation(row,field,label):
     a=before.get(field) if before else '0'; b=current.get(field) if current else '0'
     caption='Saldo anterior + variação = saldo atual' if label=='Saldo' else f'{label} anterior + atualização = total'
     return f'{caption}: {number(a)} + {number(row["deltas"][field])} = {number(b)}'
-def logo(brand,width=65):
-    image=Image(str(Path(__file__).parent/'assets'/'logos'/f'{brand}.png'))
-    ratio=image.imageHeight/image.imageWidth
-    image.drawWidth=width; image.drawHeight=width*ratio
+def logo(path, width=65):
+    image = Image(str(path))
+    aspect_ratio = image.imageHeight / image.imageWidth
+    image.drawWidth = width
+    image.drawHeight = width * aspect_ratio
     return image
+
+
+def component_cell(name, suppliers, width):
+    label = p(name, WHITE)
+    if not suppliers:
+        return label
+
+    style = ParagraphStyle("supplier", parent=BOLD, fontSize=6.3, leading=8, alignment=1)
+    marks = []
+    widths = []
+    for supplier in suppliers:
+        path = supplier_logo_path(supplier)
+        if path is not None and path.is_file():
+            mark_width = 26 if supplier == "Aquapint" else 31
+            marks.append(logo(path, mark_width))
+            widths.append(mark_width + 2)
+        else:
+            marks.append(p(supplier, style))
+            widths.append(stringWidth(supplier, style.fontName, style.fontSize) + 4)
+    brands = Table([marks], colWidths=widths, hAlign="LEFT")
+    brands.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 1),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 1),
+        ("TOPPADDING", (0, 0), (-1, -1), 1),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+    ]))
+    brand_width = sum(widths)
+    if stringWidth(name, WHITE.fontName, WHITE.fontSize) + brand_width + 5 > width:
+        return [label, Spacer(1, 2), brands]
+    inline = Table([[label, brands]], colWidths=[width - brand_width, brand_width])
+    inline.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return inline
 
 def status(value):
     if value is None: return p('-\nDADOS INCOMPLETOS',CENTER),colors.HexColor('#eeeeee')
@@ -63,11 +107,12 @@ def build_pdf(reports,generated_at):
             story.extend([p('Nenhuma alteração desde o último relatório.',BOLD),Spacer(1,10),p('Última atualização dos dados: '+(instant(updated) if updated else 'não disponível'))])
         heads=[]
         periods=report.get('periods') or weekly_periods(generated_at)
-        for side,(label,brand,color) in enumerate((('RETORNO','multipint',WINE),('REMESSA','mtech',TEAL))):
+        for side, (label, color) in enumerate((('RETORNO', WINE), ('REMESSA', TEAL))):
             badge_style=ParagraphStyle('badge',parent=CENTER,fontName='Helvetica-Bold',textColor=color)
             period=periods[side]
             date_label=f'{period.start:%d/%m} - {period.end:%d/%m/%Y}'
-            heading=Table([[p(label+'\n'+date_label,BOLD),logo(brand),p('META ACUMULADA\n'+number(snap['targets'][side]),badge_style)]],colWidths=[half*.25,half*.40,half*.35])
+            brand = logo(Path(__file__).parent / "assets" / "logos" / "mtech.png") if side == 1 else ""
+            heading=Table([[p(label+'\n'+date_label,BOLD),brand,p('META ACUMULADA\n'+number(snap['targets'][side]),badge_style)]],colWidths=[half*.25,half*.40,half*.35])
             heading.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'MIDDLE'),('BACKGROUND',(2,0),(2,0),colors.HexColor('#f3e9eb' if side==0 else '#e1f0ef')),('TOPPADDING',(0,0),(-1,-1),12),('BOTTOMPADDING',(0,0),(-1,-1),12)]));heads.append(heading)
         # A single split-capable grid keeps paired dashboard panels aligned across pages.
         left=[half*.26,half*.07,half*.10,half*.10,half*.09,half*.14,half*.24]
@@ -86,8 +131,9 @@ def build_pdf(reports,generated_at):
                 label=chunk if chunk_index==0 else identifier+' (continuação)\n'+chunk
                 values={field:('0' if item['removed'] else row[field]) for field in ('total_remessa','total_retorno','painting_balance','return_remittance_balance','previous_balance','current_balance')}
                 send,bg_send=status(values['return_remittance_balance']);ret,bg_ret=status(values['previous_balance']);current,bg_current=status(values['current_balance'])
+                suppliers = row.get("painting_suppliers", ()) if chunk_index == 0 else ()
                 n=len(data)
-                data.append([p(label,WHITE),p(number(row['quantity_per_set']),CENTER),p(number(values['total_remessa']),CENTER),p(number(values['total_retorno']),CENTER),p(number(values['painting_balance']),CENTER),send,ret,'',p(label,WHITE),p(number(row['quantity_per_set']),CENTER),p(number(values['total_remessa']),CENTER),p(number(values['total_retorno']),CENTER),p(number(values['painting_balance']),CENTER),current])
+                data.append([component_cell(label, suppliers, left[0] - 8),p(number(row['quantity_per_set']),CENTER),p(number(values['total_remessa']),CENTER),p(number(values['total_retorno']),CENTER),p(number(values['painting_balance']),CENTER),send,ret,'',component_cell(label, suppliers, right[0] - 8),p(number(row['quantity_per_set']),CENTER),p(number(values['total_remessa']),CENTER),p(number(values['total_retorno']),CENTER),p(number(values['painting_balance']),CENTER),current])
                 for column,color in ((0,SOFT),(8,SOFT),(2,colors.HexColor('#fff0a8')),(10,colors.HexColor('#fff0a8')),(4,colors.HexColor('#dcecf8')),(12,colors.HexColor('#dcecf8')),(5,bg_send),(6,bg_ret),(13,bg_current)):
                     commands.append(('BACKGROUND',(column,n),(column,n),color))
         table=Table(data,colWidths=widths,repeatRows=2,splitByRow=1,splitInRow=0);table.setStyle(TableStyle(commands));story.append(table)
