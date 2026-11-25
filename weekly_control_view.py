@@ -150,6 +150,8 @@ WEEKLY_CONTROL_CSS = """
   .weekly-table .weekly-remittance { background: var(--weekly-yellow); font-weight: 800; }
   .weekly-table .weekly-balance { background: var(--weekly-blue); font-weight: 800; }
   .weekly-table .weekly-target-balance { font-weight: 900; }
+  .weekly-table .weekly-return-supplier { min-width: 95px; font-size: 11px; }
+  .weekly-return-supplier .painting-suppliers { justify-content: center; margin: 0; }
   .weekly-status { display: block; font-size: 8px; margin-top: 2px; text-transform: uppercase; }
   .weekly-pending { background: var(--weekly-danger); color: white; }
   .weekly-covered { background: var(--weekly-success); color: #165626; }
@@ -298,6 +300,7 @@ def _row(
     target_side: str,
     paint: bool = False,
     include_return_remittance: bool = False,
+    return_suppliers: tuple[str, ...] = (),
 ) -> str:
     target_balance = (
         row.previous_balance if target_side == "previous" else row.current_balance
@@ -307,6 +310,12 @@ def _row(
         if include_return_remittance
         else ""
     )
+    supplier_cell = ""
+    if include_return_remittance:
+        supplier_label = "—"
+        if target_balance is not None and target_balance < 0 and (row.painting_balance or 0) > 0:
+            supplier_label = supplier_labels_html(return_suppliers) or "Não informado"
+        supplier_cell = f'<td class="weekly-return-supplier">{supplier_label}</td>'
     row_class = ' class="weekly-paint-row"' if paint else ""
     return (
         f"<tr{row_class}>"
@@ -316,7 +325,7 @@ def _row(
         f"<td>{format_pt_br(row.total_retorno)}</td>"
         f'<td class="weekly-balance">{format_pt_br(row.painting_balance)}</td>'
         f"{return_remittance_cell}"
-        f"{_balance_cell(target_balance)}"
+        f"{_balance_cell(target_balance)}{supplier_cell}"
         "</tr>"
     )
 
@@ -343,7 +352,12 @@ def _panel(
 ) -> str:
     include_return_remittance = not current
     rows = "".join(
-        _row(row, target_side, include_return_remittance=include_return_remittance)
+        _row(
+            row,
+            target_side,
+            include_return_remittance=include_return_remittance,
+            return_suppliers=control.return_suppliers.get(row.component_key, ()),
+        )
         for row in control.components
     )
     rows += "".join(
@@ -352,9 +366,11 @@ def _panel(
             target_side,
             paint=True,
             include_return_remittance=include_return_remittance,
+            return_suppliers=control.return_suppliers.get(row.component_key, ()),
         )
         for row in control.paint_rows
     )
+    supplier_header = '<th scope="col">FORNECEDOR</th>' if include_return_remittance else ""
     summary = control.current_summary if current else control.previous_summary
     panel_class = "weekly-panel weekly-panel-current" if current else "weekly-panel"
     return f"""
@@ -368,7 +384,7 @@ def _panel(
           <thead><tr>
             <th scope="col">COMPONENTE</th><th scope="col">QT/DY</th>
             <th scope="col">REMESSA</th><th scope="col">RETORNO</th>
-            <th scope="col">SALDO</th>{f'<th scope="col">A ENVIAR {_brand_logo("mtech")}</th>' if include_return_remittance else ''}<th scope="col">{target_header_html}</th>
+            <th scope="col">SALDO</th>{f'<th scope="col">A ENVIAR {_brand_logo("mtech")}</th>' if include_return_remittance else ''}<th scope="col">{target_header_html}</th>{supplier_header}
           </tr></thead>
           <tbody>{rows}</tbody>
         </table>

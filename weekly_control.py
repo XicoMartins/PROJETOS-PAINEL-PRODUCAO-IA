@@ -76,6 +76,7 @@ class WeeklyControl:
     previous_summary: WeeklySummary
     current_summary: WeeklySummary
     warnings: tuple[str, ...]
+    return_suppliers: dict[str, tuple[str, ...]]
 
 
 def normalize_text(value: object) -> str:
@@ -193,12 +194,31 @@ def build_weekly_control(
 ) -> WeeklyControl:
     totals: dict[tuple[str, str], Decimal] = {}
     suppliers: dict[str, set[str]] = {}
+    supplier_totals: dict[tuple[str, str, str], Decimal] = {}
     for entry in entries:
         component = normalize_text(entry.component_key)
         key = (component, entry.movement)
         totals[key] = totals.get(key, Decimal("0")) + entry.quantity
         if supplier := painting_supplier(entry.painting_supplier):
             suppliers.setdefault(component, set()).add(supplier)
+            supplier_key = (component, supplier, entry.movement)
+            supplier_totals[supplier_key] = supplier_totals.get(supplier_key, Decimal(0)) + entry.quantity
+
+    return_suppliers = {}
+    for component, known_suppliers in suppliers.items():
+        dispatched = {
+            supplier for supplier in known_suppliers
+            if (component, supplier, "remessa") in supplier_totals
+        }
+        if not dispatched and len(known_suppliers) == 1:
+            # Older dispatches may be unlabelled while the returns name the supplier.
+            return_suppliers[component] = painting_suppliers(known_suppliers)
+            continue
+        return_suppliers[component] = painting_suppliers(
+            supplier for supplier in dispatched
+            if supplier_totals[(component, supplier, "remessa")]
+            > supplier_totals.get((component, supplier, "retorno"), Decimal(0))
+        )
 
     rows: list[WeeklyComponent] = []
     for requirement in sorted(
@@ -259,4 +279,5 @@ def build_weekly_control(
         previous_summary=_summary(component_rows, previous_target, "previous_balance"),
         current_summary=_summary(component_rows, current_target, "current_balance"),
         warnings=(),
+        return_suppliers=return_suppliers,
     )

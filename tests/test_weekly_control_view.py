@@ -53,6 +53,46 @@ class WeeklyControlViewTest(unittest.TestCase):
         )
         self.updated_at = instant
 
+    def test_return_supplier_column_shows_only_actionable_pending_returns(self):
+        from weekly_control_view import render_weekly_control_html
+
+        rows = (
+            ("CORPO CENTRAL", "remessa", 80, "Aquapint"),
+            ("CORPO CENTRAL", "retorno", 60, "Aquapint"),
+            ("CORPO CENTRAL", "remessa", 10, "Multipint"),
+            ("CORPO CENTRAL", "retorno", 10, "Multipint"),
+            ("BANDEJA", "remessa", 90, None),
+            ("BANDEJA", "retorno", 30, "SCHUNCK"),
+            ("GRELHA", "remessa", 90, None),
+            ("GRELHA", "retorno", 20, None),
+            ("COBERTO", "remessa", 120, "SCHUNCK"),
+            ("COBERTO", "retorno", 100, "SCHUNCK"),
+            ("SEM SALDO", "remessa", 60, "SCHUNCK"),
+            ("SEM SALDO", "retorno", 60, "SCHUNCK"),
+        )
+        requirements = tuple(
+            ComponentRequirement(name, name, Decimal(1), i, True)
+            for i, name in enumerate(dict.fromkeys(row[0] for row in rows))
+        )
+        entries = tuple(
+            MovementEntry(name, movement, Decimal(quantity), self.updated_at, supplier)
+            for name, movement, quantity, supplier in rows
+        )
+        control = build_weekly_control(100, 100, requirements, entries)
+        rendered = render_weekly_control_html(
+            self.identity, self.previous, self.current, control, self.updated_at
+        )
+        return_table, remittance_table = re.findall(
+            r'<table class="weekly-table">(.*?)</table>', rendered
+        )
+        self.assertIn('<th scope="col">A RETORNAR</th><th scope="col">FORNECEDOR</th>', return_table)
+        self.assertNotIn("FORNECEDOR", remittance_table)
+        cells = [
+            accessible_text(cell)
+            for cell in re.findall(r'<td class="weekly-return-supplier">(.*?)</td>', return_table)
+        ]
+        self.assertEqual(cells, ["Aquapint", "SCHUNCK", "Não informado", "—", "—"])
+
     def test_renders_the_approved_operational_panel_titles(self):
         try:
             from weekly_control_view import render_weekly_control_html
@@ -337,6 +377,7 @@ class WeeklyControlViewTest(unittest.TestCase):
                 "SALDO",
                 "A ENVIAR MTech",
                 "A RETORNAR",
+                "FORNECEDOR",
             ],
         )
         self.assertEqual(
